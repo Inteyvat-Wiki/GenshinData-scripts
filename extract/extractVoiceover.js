@@ -35,8 +35,9 @@ function collateVoiceover(lang) {
 			try {
 				voiceMapData = voiceMap[data.id][fetterObj.voiceFile].sort((a,b) => a.gender-b.gender);
 			} catch(e) {
-				console.log(`Could not find voice data for character ${data.id} fetterId ${fetterObj.fetterId} voiceFile ${fetterObj.voiceFile}`);
-				return;
+				voiceMapData = null;
+				// console.log(`Could not find voice data for character ${data.id} fetterId ${fetterObj.fetterId} voiceFile ${fetterObj.voiceFile}`);
+				// return;
 				// console.log(voiceMap[data.id])
 				// console.log('data.id: ' + data.id);
 				// console.log('fetterid: ' + fetterObj.fetterId)
@@ -49,11 +50,11 @@ function collateVoiceover(lang) {
 				title: language[fetterObj.voiceTitleTextMapHash],
 				voicelineType: fetterObj.voiceFile,
 				description: sanitizeDescription(language[fetterObj.voiceFileTextTextMapHash]),
-				voicefile: voiceMapData[0].sourceFileName.replaceAll('\\', '/')
+				voicefile: voiceMapData ? voiceMapData[0].sourceFileName.replaceAll('\\', '/') : null,
 			};
-			voiceData.voicefile = voiceData.voicefile.substring(0, voiceData.voicefile.lastIndexOf('.')); // remove .wem
+			if (voiceData.voicefile) voiceData.voicefile = voiceData.voicefile.substring(0, voiceData.voicefile.lastIndexOf('.')); // remove .wem
 
-			if (voiceMapData.length > 1) { // has two voicelines for lumine and aether
+			if (voiceMapData && voiceMapData.length > 1) { // has two voicelines for lumine and aether
 				voiceData.voicefile_male = voiceMapData[1].sourceFileName.replaceAll('\\', '/');
 				voiceData.voicefile_male = voiceData.voicefile_male.substring(0, voiceData.voicefile_male.lastIndexOf('.')); // remove .wem
 				voiceData.hasGenderedVoicefile = true;

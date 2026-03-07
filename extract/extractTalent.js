@@ -26,13 +26,27 @@ function collateTalent(lang) {
 				data.name = language[obj.nameTextMapHash]; // client-facing name
 				if(isTraveler(obj)) data.name += ` (${language[elementTextMapHash[getPlayerElement(obj.skillDepotId)]]})`
 
+				let unlock_ascension = {};
+
 				let combat = depot.skills.concat([depot.energySkill]) // get array of combat skills IDs
 				// console.log(depot[getPropInherentProudSkillOpens()])
+				// console.log(depot[getPropInherentProudSkillOpens2()])
 				let passive = depot[getPropInherentProudSkillOpens()].reduce((accum2, proud, index) => { // get array of passive skill IDs
 					if(filename === 'raidenshogun' && index === 2) return accum2; // skip hidden cannot cook passive
-					if(proud.proudSkillGroupId) accum2.push(proud.proudSkillGroupId);
+					if(proud.proudSkillGroupId) {
+						accum2.push(proud.proudSkillGroupId);
+						unlock_ascension[proud.proudSkillGroupId] = proud[getPropInherentProudSkillOpensKey()] || 0;
+					}
 					return accum2;
-				}, []);
+				}, []).concat(
+					depot[getPropInherentProudSkillOpens2()].reduce((accum2, proud, index) => {
+						if(proud.proudSkillGroupId) {
+							accum2.push(proud.proudSkillGroupId);
+							unlock_ascension[proud.proudSkillGroupId] = -1;
+						}
+						return accum2;
+					}, [])
+				);
 				let parameters = {};
 				let costs = {};
 				combat.forEach((skId, index) => {
@@ -43,7 +57,7 @@ function collateTalent(lang) {
 						console.log(`combat talent missing index ${index}`)
 					}
 					let ref = data[combatTypeProp] = {};
-					// ref.id = talent.id;
+					ref.id = talent.id;
 					ref.name = language[talent.nameTextMapHash];
 					if (ref.name === undefined) return; // citlali jump talent doesn't have a name/description
 					validateString(ref.name, 'talents.combatname', lang);
@@ -119,12 +133,13 @@ function collateTalent(lang) {
 				passive.forEach((skId, index) => {
 					let talent = xpassive.find(pas => pas.proudSkillGroupId === skId);
 					let ref = data['passive'+(index+1)] = {}; // store reference in variable to make it easier to access
-					// ref.id = skId;
+					ref.id = talent.proudSkillId;
 					ref.name = language[talent.nameTextMapHash];
 					validateString(ref.name, 'talents.passivename', lang);
 					ref.descriptionRaw = sanitizer(language[talent.descTextMapHash], replaceNewline);
 					ref.description = sanitizer(ref.descriptionRaw, removeColorHTML, removeHashtag, replaceGenderM, replaceLayoutPC, replaceNonBreakSpace, convertLinkToBold, removeTimezone);
 					validateString(ref.description, 'talents.passivedescription', lang);
+					ref.unlock_ascension = unlock_ascension[skId] || 0;
 					data[`filename_passive${index+1}`] = talent.icon;
 				});
 				data.costs = costs;
@@ -163,12 +178,36 @@ function getPropCostItems() {
 }
 
 let propInherentProudSkillOpens = undefined;
+let propInherentProudSkillOpensKey = undefined;
+let propInherentProudSkillOpens2 = undefined;
 function getPropInherentProudSkillOpens() {
 	if(propInherentProudSkillOpens !== undefined) return propInherentProudSkillOpens;
 	for (let [key, value] of Object.entries(xskilldepot[1])) {
 		if (Array.isArray(value) && value[0].proudSkillGroupId === 221) {
 			propInherentProudSkillOpens = key;
 			return propInherentProudSkillOpens;
+		}
+	}
+}
+function getPropInherentProudSkillOpensKey() {
+	if(propInherentProudSkillOpensKey !== undefined) return propInherentProudSkillOpensKey;
+	for (let [key, value] of Object.entries(xskilldepot[1])) {
+		if (Array.isArray(value) && value[0].proudSkillGroupId === 221) {
+			for (let [key2, value2] of Object.entries(value[0])) {
+				if (key2 !== "proudSkillGroupId") {
+					propInherentProudSkillOpensKey = key2;
+					return propInherentProudSkillOpensKey;
+				}
+			}
+		}
+	}
+}
+function getPropInherentProudSkillOpens2() {
+	if(propInherentProudSkillOpens2 !== undefined) return propInherentProudSkillOpens2;
+	for (let [key, value] of Object.entries(xskilldepot[1])) {
+		if (Array.isArray(value) && value[0].proudSkillGroupId != undefined && value[0].proudSkillGroupId !== 221) {
+			propInherentProudSkillOpens2 = key;
+			return propInherentProudSkillOpens2;
 		}
 	}
 }

@@ -19,6 +19,7 @@ function collateConstellation(lang) {
 			let stars = depot.talents.map(talentId => xconstellation.find(ele => ele.talentId === talentId));
 			for(let i = 1; i <= 6; i++) {
 				data['c'+i] = {
+					id: stars[i-1].talentId,
 					name: sanitizer(language[stars[i-1].nameTextMapHash], replaceNonBreakSpace, removeHashtag),
 					descriptionRaw: sanitizer(language[stars[i-1].descTextMapHash], replaceNewline)
 				};

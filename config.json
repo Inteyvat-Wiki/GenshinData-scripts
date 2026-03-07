@@ -1,16 +1,15 @@
 {
-	"GenshinData_folder": "D:\\Workspace\\Node\\AnimeGameData",
-	"StarRailData_folder": "D:\\Workspace\\Node\\StarRailData",
+	"GenshinData_folder": "D:\\genshin data",
 
-	"genshin_export_folder": "D:\\Workspace\\Node\\GenshinData-scripts\\export",
+	"genshin_export_folder": "D:\\GenshinData-scripts\\export",
 
 
 	"list_audio_languages": ["English(US)", "Japanese", "Chinese", "Korean"],
 	"list_output_format": ["TODO"],
 
-	"vo_file": "D:\\Workspace\\Node\\GenshinData-scripts\\voice\\db-vo.txt",
-	"AudioAssets_folder": "C:\\Program Files\\Genshin Impact\\Genshin Impact Game\\GenshinImpact_Data\\StreamingAssets\\AudioAssets",
-	"read_audio_languages": ["English(US)"],
+	"vo_file": "D:\\GenshinData-scripts\\voice\\db-vo.txt",
+	"AudioAssets_folder": "D:\\Genshin Impact International Edition\\Genshin Impact Game\\GenshinImpact_Data\\StreamingAssets\\AudioAssets",
+	"read_audio_languages": ["Chinese"],
 	"output_folder": "TODO",
 	"output_format": "TODO"
 
