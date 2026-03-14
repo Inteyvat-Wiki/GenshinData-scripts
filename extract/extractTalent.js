@@ -94,10 +94,12 @@ function collateTalent(lang) {
 					}
 
 					parameters[combatTypeProp] = {};
+					ref.proudSkillIds = [];
 					if (talent.proudSkillGroupId) {
 						for(let lvl = 1; lvl <= 15; lvl++) {
 							if(lvl !== 1 && (index === 2 || index === 3)) continue; // sprint and jump skills don't have level-up
 							let attTalent = xpassive.find(tal => (tal.proudSkillGroupId === talent.proudSkillGroupId && tal.level === lvl));
+							ref.proudSkillIds.push(attTalent.proudSkillId);
 							attTalent.paramList.forEach((value, paramIndex) => {
 								if (paramIndex === 19 && attTalent.proudSkillGroupId === 9539) // sigewinne's burst definitely does not have a 20th parameter >:(
 									return;
@@ -141,6 +143,12 @@ function collateTalent(lang) {
 					validateString(ref.description, 'talents.passivedescription', lang);
 					ref.unlock_ascension = unlock_ascension[skId] || 0;
 					data[`filename_passive${index+1}`] = talent.icon;
+
+					parameters['passive'+(index+1)] = {};
+					talent.paramList.forEach((value, paramIndex) => {
+						const name = `param${paramIndex+1}`;
+						parameters['passive'+(index+1)][name] = value;
+					});
 				});
 				data.costs = costs;
 				data.parameters = parameters;
