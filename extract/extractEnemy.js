@@ -67,7 +67,7 @@ function collateEnemy(lang) {
 			data.investigation.name = language[inv.nameTextMapHash];
 			data.investigation.categoryType = inv.monsterCategory;
 			data.investigation.categoryText = language[xmanualtext.find(e => e.textMapId === `INVESTIGATION_${inv.monsterCategory.toUpperCase()}_MONSTER`).textMapContentTextMapHash];
-			data.investigation.description = language[inv.descTextMapHash];
+			data.investigation.description = sanitizeDescription(language[inv.descTextMapHash]);
 			if(language[inv.lockDescTextMapHash] !== "") data.investigation.lockdesc = language[inv.lockDescTextMapHash];
 			data.filename_investigationIcon = inv.icon;
 			// REWARD PREVIEW
