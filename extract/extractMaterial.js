@@ -27,7 +27,8 @@ check MaterialSourceDataExcelConfigData should have
 */
 
 const filter = ['MATERIAL_EXCHANGE', 'MATERIAL_WOOD', 'MATERIAL_AVATAR_MATERIAL', 'MATERIAL_EXP_FRUIT',
-				'MATERIAL_WEAPON_EXP_STONE', 'MATERIAL_CONSUME', 'MATERIAL_FISH_BAIT', 'MATERIAL_FISH_ROD', 'MATERIAL_ELEM_CRYSTAL'];
+				'MATERIAL_WEAPON_EXP_STONE', 'MATERIAL_CONSUME', 'MATERIAL_CONSUME_BATCH_USE', 'MATERIAL_FISH_BAIT', 'MATERIAL_FISH_ROD', 'MATERIAL_ELEM_CRYSTAL',
+				'MATERIAL_WIDGET', 'MATERIAL_CHEST', 'MATERIAL_CHEST_BATCH_USE'];
 
 // Adventure EXP, Mora, Primogems, Companionship EXP, Apple, Sunsettia, Starshroom, Activated Starshroom, Scorched Starshroom
 const includeMatId = [102, 202, 201, 105, 100001, 100002, 101212, 101226, 101227];
@@ -76,7 +77,7 @@ function collateMaterial(lang) {
 		let data = {};
 		data.id = obj.id;
 		data.name = language[obj.nameTextMapHash];
-		if(data.name === '') return accum;
+		if(data.name === '' || !data.name) return accum;
 		data.sortRank = obj.rank;
 		data.description = sanitizeDescription(language[obj.descTextMapHash]);
 		data.category = obj.materialType ? obj.materialType.slice(9) : obj.itemType;
@@ -94,6 +95,12 @@ function collateMaterial(lang) {
 				data.daysOfWeek = getDayWeekList(dungeonlist[0], language); 
 			}
 		}
+
+		{
+			let tmp = xarchive.find(ele => ele.materialId === obj.id);
+			data.fullDescription = tmp ? sanitizeDescription(language[tmp.descTextMapHash]) : '';
+		}
+
 		// get fishing locations
 		// if(getLanguage('EN')[obj.typeDescTextMapHash] === 'Fish') {
 			// let fishId = xfish.find(ele => ele.itemId === obj.id).id;
