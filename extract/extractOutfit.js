@@ -20,7 +20,7 @@ for([key, value] of Object.entries(xcostume[0])) {
 }
 
 // taken from collateCharacter.js
-const playerIdToTextMapHash = { 10000005: 2329553598, 10000007: 3241049361 };
+const playerIdToTextMapHash = { 10000005: 4041832592, 10000007: 3652968845 };
 
 function collateOutfit(lang) {
 	const language = getLanguage(lang);

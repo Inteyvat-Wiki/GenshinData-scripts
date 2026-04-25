@@ -4,12 +4,19 @@ global.config = require('../config.json');
 
 global.getExcel = function(file) { return require(`${config.GenshinData_folder}/ExcelBinOutput/${file}.json`); }
 global.getBin = function(path) { return require(`${config.GenshinData_folder}/BinOutput/${path}.json`); }
+let TextMap = {};
 global.getTextMap = function(langcode) {
+	if (TextMap[langcode]) return TextMap[langcode];
 	if (['TH', 'RU'].includes(langcode)) {
-		return Object.assign(require(`${config.GenshinData_folder}/TextMap/TextMap${langcode}_0.json`),
-			require(`${config.GenshinData_folder}/TextMap/TextMap${langcode}_1.json`))
+		return TextMap[langcode] = Object.assign(require(`${config.GenshinData_folder}/TextMap/TextMap${langcode}_0.json`),
+			require(`${config.GenshinData_folder}/TextMap/TextMap${langcode}_1.json`),
+			require(`${config.GenshinData_folder}/TextMap/TextMap_Medium${langcode}_0.json`),
+			require(`${config.GenshinData_folder}/TextMap/TextMap_Medium${langcode}_1.json`)
+		)
 	} else {
-		return require(`${config.GenshinData_folder}/TextMap/TextMap${langcode}.json`);
+		return TextMap[langcode] = Object.assign(require(`${config.GenshinData_folder}/TextMap/TextMap${langcode}.json`),
+			require(`${config.GenshinData_folder}/TextMap/TextMap_Medium${langcode}.json`)
+		)
 	}
 }
 
@@ -323,8 +330,8 @@ function exportCurve(folder, file) {
 	});
 	fs.mkdirSync(`${config.genshin_export_folder}/curve`, { recursive: true });
 	fs.writeFileSync(`${config.genshin_export_folder}/curve/${folder}.json`, JSON.stringify(output, null, '\t'));
-	fs.mkdirSync(`${config.genshin_export_folder}/output/curve`, { recursive: true });
-	fs.writeFileSync(`${config.genshin_export_folder}/output/curve/${folder}.json`, JSON.stringify(output, null, '\t'));
+	fs.mkdirSync(`${config.genshin_output_folder}/curve`, { recursive: true });
+	fs.writeFileSync(`${config.genshin_output_folder}/curve/${folder}.json`, JSON.stringify(output, null, '\t'));
 }
 
 const lang_map = {
@@ -347,7 +354,7 @@ const lang_map = {
 
 function exportData(folder, collateFunc, englishonly, skipwrite) {
 	const starttime = Date.now();
-	fs.mkdirSync(`${config.genshin_export_folder}/output`, { recursive: true });
+	fs.mkdirSync(`${config.genshin_output_folder}`, { recursive: true });
 
 	const stats = {};
 	const image = {};
@@ -356,9 +363,9 @@ function exportData(folder, collateFunc, englishonly, skipwrite) {
 		if(englishonly && lang !== 'EN') return;
 		let data = collateFunc(lang);
 		fs.mkdirSync(`${config.genshin_export_folder}/${lang}`, { recursive: true });
-		fs.mkdirSync(`${config.genshin_export_folder}/output/${lang_map[lang]}`, { recursive: true });
+		fs.mkdirSync(`${config.genshin_output_folder}/${lang_map[lang]}`, { recursive: true });
 		if(!skipwrite) {
-			fs.mkdirSync(`${config.genshin_export_folder}/output/${lang_map[lang]}/${folder}`, { recursive: true });
+			fs.mkdirSync(`${config.genshin_output_folder}/${lang_map[lang]}/${folder}`, { recursive: true });
 			for (let key in data) {
 				if (data[key].stats != undefined) {
 					stats[key] = data[key].stats;
@@ -376,7 +383,7 @@ function exportData(folder, collateFunc, englishonly, skipwrite) {
 					}
 				}
 
-				fs.writeFileSync(`${config.genshin_export_folder}/output/${lang_map[lang]}/${folder}/${key}.json`, JSON.stringify(data[key], null, '\t'));
+				fs.writeFileSync(`${config.genshin_output_folder}/${lang_map[lang]}/${folder}/${key}.json`, JSON.stringify(data[key], null, '\t'));
 				// if(JSON.stringify(data[key]).search('undefined') !== -1) console.log('undefined found in '+folder);
 				// if(data[key][""]) console.log('empty key found in '+folder);
 			}
@@ -388,12 +395,12 @@ function exportData(folder, collateFunc, englishonly, skipwrite) {
 	});
 
 	if (Object.keys(stats).length > 0) {
-		fs.mkdirSync(`${config.genshin_export_folder}/output/stats`, { recursive: true });
-		fs.writeFileSync(`${config.genshin_export_folder}/output/stats/${folder}.json`, JSON.stringify(stats, null, '\t'));
+		fs.mkdirSync(`${config.genshin_output_folder}/stats`, { recursive: true });
+		fs.writeFileSync(`${config.genshin_output_folder}/stats/${folder}.json`, JSON.stringify(stats, null, '\t'));
 	}
 	if (Object.keys(image).length > 0) {
-		fs.mkdirSync(`${config.genshin_export_folder}/output/image`, { recursive: true });
-		fs.writeFileSync(`${config.genshin_export_folder}/output/image/${folder}.json`, JSON.stringify(image, null, '\t'));
+		fs.mkdirSync(`${config.genshin_output_folder}/image`, { recursive: true });
+		fs.writeFileSync(`${config.genshin_output_folder}/image/${folder}.json`, JSON.stringify(image, null, '\t'));
 	}
 	
 	console.log(`done ${folder} in ${(Date.now()-starttime) / 1000} seconds`);

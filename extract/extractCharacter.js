@@ -4,7 +4,7 @@ require('./global.js');
 const xextrainfo = getExcel('FetterInfoExcelConfigData');
 
 // object map that converts player's avatar id to TextMapHash
-const playerIdToTextMapHash = { 10000005: 2329553598, 10000007: 3241049361 };
+const playerIdToTextMapHash = { 10000005: 4041832592, 10000007: 3652968845 };
 const moraNameTextMapHash = getExcel('MaterialExcelConfigData').find(ele => ele.id === 202).nameTextMapHash;
 const xmat = getExcel('MaterialExcelConfigData');
 const xcity = getExcel('CityConfigData');
