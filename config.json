@@ -2,6 +2,7 @@
 	"GenshinData_folder": "D:\\genshin data",
 
 	"genshin_export_folder": "D:\\GenshinData-scripts\\export",
+	"genshin_output_folder": "D:\\genshin-db\\src\\data",
 
 
 	"list_audio_languages": ["English(US)", "Japanese", "Chinese", "Korean"],

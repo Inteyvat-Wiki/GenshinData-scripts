@@ -27,6 +27,7 @@ function exportGenshinData() {
 	exportData('namecards', require('./extract/extractNamecard'));
 	exportData('geographies', require('./extract/extractGeography'));
 	exportData('dungeons', require('./extract/extractDungeon'));
+	exportData('maplayers', require('./extract/extractMapLayer'));
 	exportData('achievements', require('./extract/extractAchievement'));
 	exportData('achievementgroups', require('./extract/extractAchievementGroup'));
 	exportData('adventureranks', require('./extract/extractAdventureRank'));
