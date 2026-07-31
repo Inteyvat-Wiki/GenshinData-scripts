@@ -122,6 +122,8 @@ function getDomainEntranceTextMapId(englishname, levelConfigMap) {
 		return "UI_DUNGEON_ENTRY_1694";
 	else if(englishname.includes('sacred vault'))
 		return "UI_DUNGEON_ENTRY_1811";
+	else if(englishname.includes('flower feast'))
+		return "UI_DUNGEON_ENTRY_2003";
 	else
 		console.log('no domain entrance mapping found for '+englishname);
 }

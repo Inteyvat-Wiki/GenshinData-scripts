@@ -59,7 +59,13 @@ global.isRealManekin = function(data) { return data.id === 10000117 || data.id =
 global.getPlayerElement = function(SkillDepotId) { let tmp = xskilldepot.find(ele => ele.id === SkillDepotId); return tmp === undefined ? tmp : tmp.talentStarName.split('_').pop(); }
 global.getLanguage = function(abbriev) { return getTextMap(abbriev.toUpperCase()); }
 global.normalizeStr = function(str) { return str.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
-global.makeFileName = function(str, lang) { return normalizeStr(str).toLowerCase().replace(/[^a-z0-9]/g,''); }
+global.makeFileName = function(str, lang) {
+	return normalizeStr(str)
+		.toLowerCase()
+		.replace(/[^a-z0-9\s]+/g, '')
+		.replace(/\s+/g, '_')
+		.replace(/^_+|_+$/g, '');
+}
 global.convertBold = function(str, removeBold) { return str.replace(/<color=#FFD780FF>(.*?)<\/color>/gi, removeBold ? '$1' : '**$1**'); }
 global.convertLinkToBold = function(str, removeBold) {
 	str = str.replace(/{LINK#.*?}(.*?){\/LINK.*?}/gi, removeBold ? '$1' : '**$1**');
@@ -103,13 +109,13 @@ global.sanitizer = function(str, ...sanfunctions) {
 	return str;
 }
 global.validateString = function(str, folder, lang, throwerror = true) {
-    // thoma's talent string has an empty color tag for some reason
-    str = str.replace('<color=#FF9999FF></color>', '');
-
     if (str === undefined) {
         if (throwerror) throw `${folder} ${lang} invalid string: String is **undefined**`;
         return false;
     }
+    // thoma's talent string has an empty color tag for some reason
+    str = str.replace('<color=#FF9999FF></color>', '');
+
     if (str === '') {
         if (throwerror) throw `${folder} ${lang} invalid string: String is **empty**`;
         return false;

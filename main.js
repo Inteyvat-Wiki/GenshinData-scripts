@@ -10,6 +10,8 @@ function exportGenshinData() {
 	exportData('talents', require('./extract/extractTalent.js'));
 	exportData('hyperlinks', require('./extract/extractHyperlinks.js'));
 	exportData('stories', require('./extract/extractStory.js'));
+	exportData('chapters', require('./extract/extractChapter.js'));
+	exportData('tasks', require('./extract/extractTask.js'));
 	exportData('weapons', require('./extract/extractWeapon.js'));
 	exportCurve('weapons', 'WeaponCurveExcelConfigData')
 	exportData('artifacts', require('./extract/extractArtifact.js'));

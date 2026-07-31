@@ -32,7 +32,7 @@ function collateTalent(lang) {
 				// console.log(depot[getPropInherentProudSkillOpens()])
 				// console.log(depot[getPropInherentProudSkillOpens2()])
 				let passive = depot[getPropInherentProudSkillOpens()].reduce((accum2, proud, index) => { // get array of passive skill IDs
-					if(filename === 'raidenshogun' && index === 2) return accum2; // skip hidden cannot cook passive
+					if(obj.id === 10000052 && index === 2) return accum2; // skip hidden cannot cook passive
 					if(proud.proudSkillGroupId) {
 						accum2.push(proud.proudSkillGroupId);
 						unlock_ascension[proud.proudSkillGroupId] = proud[getPropInherentProudSkillOpensKey()] || 0;

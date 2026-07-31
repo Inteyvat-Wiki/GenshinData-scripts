@@ -32,7 +32,7 @@ function collateArtifact(lang) {
 		obj.setNeedNum.forEach((ele, ind) => {
 			let effect = xrefine.find(e => e.affixId === obj.equipAffixId*10 + ind);
 			if (!effect) console.log(`Artifact set ${data.id} has no effect`);
-			data['effect'+ele+'Pc'] = sanitizer(language[effect.descTextMapHash], removeHashtag, replaceNonBreakSpace);
+			data['effect'+ele+'Pc'] = sanitizeDescription(sanitizer(language[effect.descTextMapHash], removeHashtag, replaceNonBreakSpace));
 			validateString(data['effect'+ele+'Pc'], 'artifacts.seteffect', lang);
 			if(setname === undefined) {
 				setname = language[effect.nameTextMapHash];
@@ -56,7 +56,7 @@ function collateArtifact(lang) {
 			const relicTypeTextMapHash = xmanualtext.find(ele => ele.textMapId === relic.equipType).textMapContentTextMapHash;
 			relicdata.relicText = language[relicTypeTextMapHash];
 			// validateString(relicdata.relicText, 'artifacts.relicText', lang);
-			relicdata.description = language[relic.descTextMapHash];
+			relicdata.description = sanitizeDescription(language[relic.descTextMapHash]);
 			validateString(relicdata.description, 'artifacts.description', lang);
 			relicdata.story = getReadable(`Relic${obj.setId}_${relicTypeToIndex[relic.equipType]}${(lang != 'CHS') ? ('_' + lang) : ''}`, lang);
 			data[relicTypeToPropertyName[relic.equipType]] = relicdata;
