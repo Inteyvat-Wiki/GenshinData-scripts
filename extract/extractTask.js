@@ -309,7 +309,11 @@ function getQuestList() {
 	if (!questList) {
 		questList = fs.readdirSync(questDir)
 			.filter(file => file.endsWith('.json'))
-			.map(file => getBin(`Quest/${path.basename(file, '.json')}`));
+			.map(file => {
+				const quest = getBin(`Quest/${path.basename(file, '.json')}`);
+				quest._sourceFile = path.basename(file, '.json');
+				return quest;
+			});
 	}
 	return questList;
 }
@@ -415,6 +419,12 @@ function getQuestId(quest) {
 	return quest[keys.questId] ||
 		Object.values(quest).find(value => Number.isInteger(value) && mainQuestById.has(value)) ||
 		0;
+}
+
+function getTaskTitleTextMapHash(quest) {
+	const questKeys = getQuestKeys();
+	const mainQuest = mainQuestById.get(getQuestId(quest));
+	return quest[questKeys.title] || mainQuest?.titleTextMapHash || '';
 }
 
 function getStepFinishConditions(step) {
@@ -705,15 +715,60 @@ function collateTask(language, quest) {
 	};
 }
 
+function getTaskBaseName(quest) {
+	const title = getLanguage('EN')[getTaskTitleTextMapHash(quest)];
+	return makeFileName(title || '') || String(getQuestId(quest));
+}
+
 function collateTasks(languageCode = 'CHS') {
 	const language = getLanguage(languageCode);
-	return getQuestList()
-		.map(quest => collateTask(language, quest))
-		.filter(task => task.name || task.steps.length || task.talks.length)
-		.reduce((accum, task) => {
-			accum[task.id] = task;
-			return accum;
-		}, {});
+	const filenames = {};
+	const quests = getQuestList()
+		.slice()
+		.sort((a, b) => {
+			const idDiff = getQuestId(a) - getQuestId(b);
+			if (idDiff !== 0) return idDiff;
+			// 同 id：原始文件名等于 id（数字命名）的文件优先，保证命名确定性
+			const aIsIdName = a._sourceFile === String(getQuestId(a)) ? 0 : 1;
+			const bIsIdName = b._sourceFile === String(getQuestId(b)) ? 0 : 1;
+			if (aIsIdName !== bIsIdName) return aIsIdName - bIsIdName;
+			return (a._sourceFile || '').localeCompare(b._sourceFile || '');
+		});
+
+	// 统计 base 名称出现次数，找出有重名的
+	const baseCounts = new Map();
+	for (const quest of quests) {
+		const base = getTaskBaseName(quest);
+		baseCounts.set(base, (baseCounts.get(base) || 0) + 1);
+	}
+
+	return quests.map(quest => {
+		const task = collateTask(language, quest);
+		const base = getTaskBaseName(quest);
+		let filename = base;
+
+		// 出现重复文件名：先追加 -${id}
+		if (baseCounts.get(base) > 1) {
+			filename = `${base}-${task.id}`;
+			// 仍重复：去掉追加的 id，改为追加 -${原始数据文件名}
+			if (filenames[filename] !== undefined) {
+				filename = `${base}-${quest._sourceFile || task.id}`;
+			}
+			// 保底：若源文件名与 id 相同仍冲突，追加序号直到唯一
+			let i = 1;
+			while (filenames[filename] !== undefined) {
+				filename = `${base}-${quest._sourceFile || task.id}-${String(i++).padStart(2, '0')}`;
+			}
+		}
+
+		filenames[filename] = task;
+		return [filename, task];
+	})
+	.filter(([, task]) => task.name || task.steps.length || task.talks.length)
+	.reduce((accum, [filename, task]) => {
+		accum[filename] = task;
+		return accum;
+	}, {});
 }
 
 module.exports = collateTasks;
