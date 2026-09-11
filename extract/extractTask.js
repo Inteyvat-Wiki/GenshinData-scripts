@@ -35,6 +35,7 @@ const sampleFirstStepText = '与凯瑟琳对话';
 const sampleSecondStepText = '与赛索斯交流现状';
 const sampleDialogText = '#{NICKNAME}、派蒙，好久不见。';
 const sampleSubtitleText = '内心的「错谬」';
+const sampleSpeakerTitleText = '依稀可以辨认的布告';
 
 function isObject(value) {
 	return value && typeof value === 'object' && !Array.isArray(value);
@@ -96,6 +97,8 @@ function getQuestKeys() {
 		title: findKey(quest, value => textMapValueEquals(chinese, value, sampleQuestTitleText), 'quest title'),
 		description: findKey(quest, value => textMapValueEquals(chinese, value, sampleQuestDescriptionText), 'quest description'),
 		chapterId: findKey(quest, value => value === 1609, 'chapter id'),
+		taskShowType: findKey(quest, value =>
+			value === 'QUEST_SHOW' || value === 'QUEST_HIDDEN', 'task show type'),
 		steps: findKey(quest, value =>
 			Array.isArray(value) && value.some(step =>
 				isObject(step) &&
@@ -258,6 +261,7 @@ function getTalkConfigKeys() {
 
 	talkConfigKeys = {
 		talkId: findKey(talkConfig, value => value === 303401, 'talk config id'),
+		priority: detectTalkConfigPriorityKey(),
 		npcIds: findKey(talkConfig, value => Array.isArray(value) && value.includes(7000), 'talk config npc ids'),
 		beginConditions: findKey(talkConfig, value =>
 			Array.isArray(value) && value.some(condition =>
@@ -269,10 +273,38 @@ function getTalkConfigKeys() {
 			value === 'LOGIC_NONE' && optionalTalkConfig[key] === 'LOGIC_OR', 'talk config begin condition logic'),
 		beginWay: findKey(talkConfig, value => value === 'TALK_BEGIN_MANUAL', 'talk config begin way'),
 		mark: findKey(talkConfig, value =>
-			typeof value === 'string' && value.startsWith('TALK_MARK_'), 'talk config mark')
+			typeof value === 'string' && value.startsWith('TALK_MARK_'), 'talk config mark'),
+		performCfg: findKey(talkConfig, value =>
+			typeof value === 'string' && value.startsWith('QuestDialogue/'), 'talk config perform cfg')
 	};
 
 	return talkConfigKeys;
+}
+
+// 76682 的六个对话构成固定的优先级回退链；只用对话 id 定位样本，避免依赖随机字段名。
+function detectTalkConfigPriorityKey() {
+	const sampleQuest = findQuestById(76682);
+	const questKeys = getQuestKeys();
+	const talkConfigs = sampleQuest?.[questKeys.talkConfigs];
+	const sampleTalkIds = [7668201, 7668202, 7668203, 7668204, 7668205, 7668206];
+	const samples = sampleTalkIds.map(talkId =>
+		talkConfigs?.find(config => isObject(config) && objectHasValue(config, talkId)));
+
+	if (samples.some(config => !config)) {
+		throw new Error('tasks: failed to locate sample talk priority configs');
+	}
+
+	const candidates = Object.keys(samples[0]).filter(key => {
+		const values = samples.map(config => config[key]);
+		return values.every(value => Number.isInteger(value)) &&
+			new Set(values).size > 1 &&
+			values.every((value, index) => index === 0 || value < values[index - 1]);
+	});
+
+	if (candidates.length !== 1) {
+		throw new Error('tasks: failed to detect talk priority field');
+	}
+	return candidates[0];
 }
 
 function getTalkKeys() {
@@ -291,6 +323,13 @@ function getTalkKeys() {
 	const subtitleTalk = getBin('Talk/Quest/00832db3');
 	const subtitleDialogs = subtitleTalk[dialogList];
 	const subtitleDialog = subtitleDialogs.find(dialog => objectHasValue(dialog, 402452601));
+	const speakerTitleTalk = getBin('Talk/Quest/7504417');
+	const speakerTitleDialogList = findKey(speakerTitleTalk, value =>
+		Array.isArray(value) && value.some(dialog =>
+			isObject(dialog) && objectHasValue(dialog, 750441701)
+		), 'speaker title dialog list');
+	const speakerTitleDialog = speakerTitleTalk[speakerTitleDialogList]
+		.find(dialog => objectHasValue(dialog, 750441701));
 
 	talkKeys = {
 		talkId: findKey(sampleTalk, value => value === 303401, 'talk id'),
@@ -299,7 +338,12 @@ function getTalkKeys() {
 		content: findKey(sampleDialog, value => textMapValueEquals(chinese, value, sampleDialogText), 'dialog content'),
 		next: findKey(sampleDialog, value => Array.isArray(value) && value.includes(30340102), 'next dialogs'),
 		speaker: findKey(sampleDialog, value => isObject(value) && value._type === 'TALK_ROLE_NPC', 'speaker'),
-		subtitle: findKey(subtitleDialog, value => textMapValueEquals(chinese, value, sampleSubtitleText), 'speaker subtitle')
+		subtitle: findKey(subtitleDialog, value => textMapValueEquals(chinese, value, sampleSubtitleText), 'speaker subtitle'),
+		speakerTitle: findKey(speakerTitleDialog,
+		value => textMapValueEquals(chinese, value, sampleSpeakerTitleText), 'speaker title'),
+		showType: findKey(sampleDialog,
+			value => value === 'TALK_SHOW_DEFAULT' || value === 'TALK_SHOW_FORCE_SELECT',
+			'dialog show type')
 	};
 
 	return talkKeys;
@@ -349,7 +393,10 @@ function getTalkData(talkId) {
 }
 
 function getText(language, textMapHash) {
-	return textMapHash && language[textMapHash] ? language[textMapHash] : '';
+	const text = textMapHash && language[textMapHash] ? language[textMapHash] : '';
+	return text
+		? sanitizer(text, replaceNewline, replaceNonBreakSpace, replaceLayoutPC, removeSprite, removeTimezone)
+		: '';
 }
 
 function getNpcName(language, npcId) {
@@ -399,7 +446,12 @@ function makeDialog(language, dialog) {
 	const keys = getTalkKeys();
 	const speakerInfo = dialog[keys.speaker] || {};
 	const roleType = speakerInfo._type || '';
-	const speakerTitle = roleType === 'TALK_ROLE_NPC' ? getNpcName(language, speakerInfo._id) : '';
+	const speakerName = roleType === 'TALK_ROLE_NPC'
+		? getNpcName(language, speakerInfo._id)
+		: roleType === 'TALK_ROLE_PLAYER'
+			? '#{NICKNAME}'
+			: '';
+	const speakerTitle = getText(language, dialog[keys.speakerTitle]);
 	const speakerSubtitle = getText(language, dialog[keys.subtitle]);
 	const data = {
 		id: dialog[keys.dialogId],
@@ -408,6 +460,8 @@ function makeDialog(language, dialog) {
 		nextDialogs: dialog[keys.next] || []
 	};
 
+	if (dialog[keys.showType]) data.showType = dialog[keys.showType];
+	if (speakerName) data.speakerName = speakerName;
 	if (speakerTitle) data.speakerTitle = speakerTitle;
 	if (speakerSubtitle) data.speakerSubtitle = speakerSubtitle;
 
@@ -630,6 +684,9 @@ function makeTalkSegment(language, talkId, talkConfig, stepsByTalkId) {
 		: [];
 	const segment = {
 		id: talkId,
+		priority: talkConfig && Number.isFinite(talkConfig[talkConfigKeys.priority])
+			? talkConfig[talkConfigKeys.priority]
+			: 0,
 		completionStepIds: completionSteps.map(step => getStepId(step, Math.floor(talkId / 100))),
 		beginWay: talkConfig ? getTalkConfigString(talkConfig, talkConfigKeys.beginWay, 'TALK_BEGIN_') : '',
 		beginConditions: talkConfig
@@ -638,6 +695,7 @@ function makeTalkSegment(language, talkId, talkConfig, stepsByTalkId) {
 				getTalkConfigString(talkConfig, talkConfigKeys.beginLogic, 'LOGIC_'))
 			: makeConditionGroup([]),
 		mark: talkConfig ? getTalkConfigString(talkConfig, talkConfigKeys.mark, 'TALK_MARK_') : '',
+		performCfg: talkConfig ? getTalkConfigString(talkConfig, talkConfigKeys.performCfg, 'QuestDialogue/') : '',
 		trigger: {
 			objectNames: triggerNpcNames,
 			points: talkConfig ? getTalkConfigPoints(talkConfig) : []
@@ -705,7 +763,7 @@ function collateTask(language, quest) {
 		description,
 		unlockDescription,
 		chapter: getChapterTitle(language, quest[questKeys.chapterId]),
-		showType: mainQuest ? mainQuest.showType : '',
+		showType: quest[questKeys.taskShowType],
 		activityId: mainQuest ? mainQuest.activityId : 0,
 		mainQuestTag: mainQuest ? mainQuest.mainQuestTag : '',
 		suggestTrackMainQuestList: mainQuest ? mainQuest.suggestTrackMainQuestList : [],
@@ -772,3 +830,440 @@ function collateTasks(languageCode = 'CHS') {
 }
 
 module.exports = collateTasks;
+
+/*
+ * =====================================================================================
+ * 任务数据结构笔记
+ *
+ * 这部分只记录当前解包数据中已经确认或高可信推断出的语义，不参与运行。
+ * 游戏更新后混淆字段名可能改变，因此上面的提取逻辑应继续通过固定文本、枚举值
+ * 和 ID 推断字段；下面出现的混淆键名只是当前数据版本中的示例，不能当作永久键名。
+ *
+ * 一、文件之间的关系
+ *
+ *   MainQuestExcelConfigData.json
+ *       主任务的表格记录：名称、描述、章节、任务类型、显示状态、前后任务关系提示等。
+ *
+ *   MainQuestFmtQuestRelateExcelConfigData.json
+ *       主任务之间的关系表：前置主任务、关系序号等。它比 suggestTrackMainQuestList
+ *       更接近任务列表中的前后关系，但仍然是“配置关系”，不是实际运行时的唯一流程图。
+ *
+ *   ChapterExcelConfigData.json
+ *       章节元数据：章节名、幕数文本、图标、章节任务范围和所属城市。
+ *       任务的 chapterId 指向这里的 id；这里的 cityId 是章节/地图归属，不是任务列表
+ *       中显示的精确地区名。
+ *
+ *   NpcExcelConfigData.json
+ *       NPC 元数据：NPC id、名称文本、模型/脚本路径和可见性相关字段。任务对话配置中
+ *       的 npcIds 只能通过这里还原名称；当前版本源字段的拼写是 invisiable。
+ *
+ *   QuestExcelConfigData.json
+ *       通用步骤表格。每一条记录通常对应一个 subId（例如 303401），而不是一个
+ *       MainQuest id；mainId 指向所属主任务，order 是步骤显示/执行顺序。
+ *
+ *   BinOutput/Quest/<source>.json
+ *       任务运行时总配置。文件名不一定等于任务 id；根对象内保存主任务信息、步骤数组、
+ *       对话段配置、任务动作和若干运行开关。
+ *
+ *   BinOutput/QuestBrief/<source>.json
+ *       Quest 的精简/摘要副本，通常保留步骤和列表显示所需字段。它与 Quest 文件不是
+ *       “普通任务/隐藏任务”的分类；同一个任务可能在两个目录中都有一份配置。
+ *
+ *   BinOutput/Talk/Quest/<source>.json
+ *       对话段正文。一个文件通常对应一个 talkId，内部包含多个连续 dialog；dialog id
+ *       常见形式为 talkId * 100 + 局部序号，但不能只依赖数字格式。
+ *
+ *   BinOutput/Talk/FreeGroup/*.json、BinOutput/Talk/Npc/*.json
+ *       非主任务对话或 NPC/自由对话，结构与 Talk/Quest 的正文相近，但当前任务导出器
+ *       只从 Talk/Quest 建立任务对话。
+ *
+ *   BinOutput/InterAction/QuestDialogue/**
+ *       对话演出配置：黑屏、镜头、角色显隐、配音、字幕、对话动作和动作组跳转等。
+ *       任务对话配置中的 performCfg 是它的逻辑路径。extractInteraction.js 当前负责把
+ *       这些文件原样复制到导出目录，尚未在本文件中展开解析。
+ *
+ *   BinOutput/IndexDic/MainQuestIndex.json、MainQuestBriefIndex.json
+ *       id 到资源哈希/资源文件的索引。它们用于资源定位，不改变 Quest 内部字段语义。
+ *       BinOutput/CodexQuest 和 BinOutput/RandomQuest 是另外的任务系统，不能直接当成
+ *       MainQuest/Quest 的同一套结构。
+ *
+ * 二、主任务表 MainQuestExcelConfigData
+ *
+ *   {
+ *     id:                         主任务 id，例如 3034、76132；
+ *     type:                       任务大类，例如 AQ、SQ、LQ、WQ、EQ；
+ *     titleTextMapHash:           任务名称文本哈希；
+ *     descTextMapHash:            任务描述文本哈希；
+ *     unlockDescTextMapHash:      解锁条件/解锁描述文本哈希；
+ *     chapterId:                  所属章节 id；
+ *     showType:                   主任务是否在任务列表显示，常见为 QUEST_SHOW/QUEST_HIDDEN；
+ *     activityId:                 关联活动 id，没有时通常为空或 0；
+ *     mainQuestTag:               任务标签，如 MAINQUEST_TAG_GUIDE；
+ *     suggestTrackMainQuestList:  推荐追踪的后续主任务列表，属于提示关系；
+ *     suggestTrackOutOfOrder:     是否允许/建议以非严格顺序追踪，少数任务存在；
+ *     luaPath:                    任务脚本路径；
+ *     activeMode:                 单人/联机等运行模式，如 PLAY_MODE_SINGLE；
+ *     repeatable:                 是否可重复；
+ *     recommendLevel:             推荐等级；
+ *     showRedPoint:               是否显示红点；
+ *     specialShowCondIdList:      特殊展示条件值列表；
+ *     specialShowQuestId:         特殊展示所关联的任务/步骤；
+ *     specialShowRewardId:        特殊展示所关联的奖励；
+ *     taskID:                     旧任务系统或活动任务关联 id；
+ *     resId:                      资源/任务系列资源 id；
+ *     series:                     任务系列 id；
+ *     rewardIdList:               完成任务后使用的奖励配置 id 列表；
+ *   }
+ *
+ *   当前 3034 运行时根对象中可以对应出以下混淆键（仅作版本样本）：
+ *     OIFGMOHKPOI -> id
+ *     ALBFHGKNMLK -> type
+ *     LKAHEACOLML -> titleTextMapHash
+ *     OANENPOPCFO -> descTextMapHash
+ *     BEADANLODNC -> chapterId
+ *     OOBHMECAOMO -> taskShowType/showType
+ *     OHGFCOEOKNE -> suggestTrackMainQuestList
+ *     EBNBLBEIFFJ -> steps
+ *     OJACLOOEAMG -> talkConfigs
+ *     PILOAOEBADG -> luaPath
+ *     NFPCAMMDFPL -> mainQuestTag
+ *     LJEBHLCEPCO -> activeMode
+ *     CKMCPKCGFKC -> resId
+ *     KLCKHGEHDAB -> series
+ *     COICJJGHIAE -> rewardIdList
+ *
+ *   下面这些字段确实是任务级数据，但目前没有足够跨版本样本给出稳定明文名：
+ *     BJOCFAJIGLH、BPGACCOOOCP、GCKCHBJABKF、HJKOMOOMBDI、
+ *     FFBHIPPEIPL、GJALLLEHDIG、JLEAMPGCIJH、CBNINLNFMPF、
+ *     CBELEMPPMIP、FMNKCBMBEBB、INFANDLNPPF、PAIFDGFMODG、
+ *     GAKFMAHOBNA、OEGMABCHEON、以及不同版本新增的布尔/整数配置。
+ *   它们可能控制暂停资源、资源包、兼容逻辑或客户端显示开关，不应仅凭一个样本硬编码。
+ *
+ * 三、主任务关系表 MainQuestFmtQuestRelateExcelConfigData
+ *
+ *   {
+ *     mainQuestID:      主任务 id；
+ *     prevMainQuestList:前置主任务 id 列表；
+ *     relationOrder:    关系/排序用的整数；
+ *     relationTextHash: 关系说明或其他文本/资源哈希；
+ *   }
+ *
+ *   当前数据中的混淆对应：JPHNIKNHFBL -> prevMainQuestList。
+ *   例如 mainQuestID=3035 的 JPHNIKNHFBL=[3034]，说明 3034 是 3035 的前置主任务。
+ *   GCOCPOOBMEE 等同样形态的数组可能是其他关系集合，未统一确认，不应和前置列表
+ *   自动合并。
+ *
+ *   ChapterFmtQuestRelateExcelConfigData.json 使用相同的关系表形态，但主键是 chapterID，
+ *   通常表示章节之间的前置/关联章节；不能把其中的 chapter id 直接当作 mainQuest id。
+ *
+ * 四、章节表 ChapterExcelConfigData
+ *
+ *   {
+ *     id:                         章节 id；
+ *     chapterTitleTextMapHash:    章节名称文本哈希；
+ *     chapterNumTextMapHash:      “序幕/第一幕/尾声”等章节序号文本哈希；
+ *     chapterIcon:                章节图标资源名；
+ *     chapterSerialNumberIcon:    序号图标资源名；
+ *     chapterImageHash:           章节大图资源哈希；
+ *     chapterImageTitleTextMapHash:章节大图标题文本哈希；
+ *     beginQuestId/endQuestId:    章节任务范围的起止提示；
+ *     cityId:                     章节的城市/大地区 id；
+ *     groupId:                    章节组/系列 id；
+ *     needPlayerLevel:            章节显示或解锁所需等级；
+ *     ...                         章节样式、奖励和附属章节列表；
+ *   }
+ *
+ *   LINLPCFFGFC -> 章节样式（如 CHAPTER_STYLE_TYPE_AQ）；
+ *   PACJEJCGPLN -> 附属章节/章节组 id 列表；
+ *   PBIOMJGIMAK、PPEMOIFMNBK -> 章节关联资源/显示配置，具体含义尚未完全确认。
+ *
+ * 五、Quest 根对象 BinOutput/Quest/*.json
+ *
+ *   逻辑上的结构可以写成：
+ *
+ *   {
+ *     questId:       number,
+ *     titleHash:     number,
+ *     descriptionHash:number,
+ *     chapterId:     number,
+ *     showType:      QUEST_SHOW | QUEST_HIDDEN,
+ *     mainQuestType: AQ | SQ | LQ | WQ | EQ | ...,
+ *     steps:         StepConfig[],
+ *     talkConfigs:   TalkConfig[],
+ *     questExecGroups:任务动作/演出配置,
+ *     embeddedDialogs:任务内嵌对话摘要,
+ *     runtimeFlags:  其他客户端运行开关
+ *   }
+ *
+ *   当前版本中最重要的根字段：
+ *     OIFGMOHKPOI -> questId
+ *     LKAHEACOLML -> titleHash
+ *     OANENPOPCFO -> descriptionHash
+ *     BEADANLODNC -> chapterId
+ *     OOBHMECAOMO -> showType
+ *     ALBFHGKNMLK -> mainQuestType
+ *     EBNBLBEIFFJ -> steps
+ *     OJACLOOEAMG -> talkConfigs
+ *     BNBFMHAHMLB -> 任务级动作/演出资源容器
+ *     PFALHAKIILD -> 根对象附带的对话摘要列表（并非所有任务都使用）
+ *     HNBPDOIIEKL 等 -> 任务动作或资源操作列表
+ *
+ *   一个根对象可能还有资源哈希数组、奖励、场景、暂停策略和兼容字段。它们服务于
+ *   游戏运行，不等同于“任务文本顺序”；当前导出只保留能可靠映射到任务页面的部分。
+ *
+ * 六、步骤 StepConfig
+ *
+ *   {
+ *     stepId:          步骤 id，例如 303401；
+ *     mainQuestId:     所属主任务 id；
+ *     order:           步骤列表/运行顺序，例如 1、2、3；
+ *     descriptionHash: 步骤描述文本哈希；
+ *     finishConditions:步骤完成条件数组；
+ *     guide:           任务指引配置；
+ *     listShowType:    QUEST_SHOW 或 QUEST_HIDDEN，控制是否在任务列表显示；
+ *     finishParent:    完成该步骤时是否直接推进/完成父任务；
+ *     guideActions:    步骤激活、完成时执行的动作；
+ *     relatedNpcIds:   步骤关联的 NPC/实体 id 列表；
+ *   }
+ *
+ *   当前 303401 样本中的稳定对应：
+ *     KCGAKLCHDCC -> stepId
+ *     BJAAAKHKKKL -> mainQuestId
+ *     EMNMIOBCCLL -> order
+ *     OANENPOPCFO -> descriptionHash
+ *     ANBEKNMDKCH -> finishConditions
+ *     DKMGEKFHOFN -> guide
+ *     OABMCAIEHJL -> finishParent（高可信推断）
+ *     PDIBCNJCNPJ、OOBHMECAOMO、IOBNOOPBEIL -> 步骤显示状态候选字段。
+ *       其中真正用于列表显示的字段需要比较同一任务内 QUEST_SHOW/QUEST_HIDDEN 的变化，
+ *       不能凭某个键名固定判断。
+ *     BINGFLAPDKN -> showGuide（QUEST_GUIDE_ITEM_ENABLE/DISABLE）
+ *     HKEHPKFBCIH -> 关联 NPC/实体 id 列表（高可信推断）
+ *     HNBPDOIIEKL -> QUEST_EXEC_* 动作列表
+ *     DKMGEKFHOFN 内的 OPDGHDAADJC -> 指引参数，可能包含 NPC、场景、点位和角度。
+ *
+ *   QuestExcelConfigData 的同义表格结构：
+ *     subId -> stepId；mainId -> mainQuestId；order -> order；
+ *     subIdSet -> 步骤变体/步骤集合标记（仅部分数据存在）；
+ *     stepDescTextMapHash -> descriptionHash；guideTipsTextMapHash -> 指引提示文本；
+ *     acceptCondComb -> 步骤激活/指引配置；finishCondComb -> 表格完成条件组合；
+ *     failCondComb -> 失败/隐藏相关配置，常见值为 QUEST_HIDDEN；
+ *     failParent -> 失败时父任务相关的配置哈希；
+ *     isMpBlock -> 是否阻止联机；showGuide -> 是否显示任务指引。
+ *   该表是通用表格信息，BinOutput/Quest 中的 StepConfig 通常包含更多运行时字段。
+ *
+ * 七、任务对话段 TalkConfig
+ *
+ *   {
+ *     talkId:          对话段 id，例如 303401、303450；
+ *     mainQuestId:     所属主任务 id；
+ *     npcIds:          触发/参与该段对话的 NPC id 列表；
+ *     beginWay:        TALK_BEGIN_*，手动、自动等开始方式；
+ *     beginConditions: 对话段出现条件数组；
+ *     beginLogic:      条件组合逻辑，如 LOGIC_NONE、LOGIC_AND、LOGIC_OR；
+ *     mark:            TALK_MARK_*，对话标记；
+ *     performCfg:      QuestDialogue/... 演出配置路径；
+ *     triggerPoints:   触发点字符串数组，格式通常为
+ *                      [sceneId_pointId:x,y,z,rotX,rotY,rotZ]；
+ *     priority:        同一位置/条件下的对话优先级，数值越高通常越优先；
+ *     initDialogId:    该段对话的首个 dialog id；
+ *     talkType:        TALK_NORMAL_QUEST 等对话类别；
+ *     playMode:        PLAY_MODE_SINGLE/HOST 等运行模式；
+ *   }
+ *
+ *   当前版本常见对应：
+ *     OIFGMOHKPOI -> talkId
+ *     EPGEOMCHIJF -> mainQuestId
+ *     BMFEMALEAIO -> npcIds
+ *     FCBOEAHDNOL -> beginConditions
+ *     OOKGALBCGPG -> beginLogic
+ *     KBEFDBNKONK -> beginWay
+ *     KADDKCMECCG -> mark
+ *     EDIMJFOBEKG -> performCfg
+ *     JOAONNFGOPN -> triggerPoints
+ *     FIGCGCDEBEB -> priority
+ *     MCIAGDCECPL -> initDialogId
+ *     MGODKFODHJL -> talkType
+ *     LJEBHLCEPCO -> playMode
+ *   DGOHGKOIKNG、HGLNDNACBKO、HNBPDOIIEKL 等空数组/动作数组可能是结束动作、跳转、
+ *   演出参数或兼容字段；不同对话类型的布局并不完全相同，不能仅按数组位置解释。
+ *
+ * 八、对话正文 Dialog（BinOutput/Talk/Quest/*.json）
+ *
+ *   TalkFile {
+ *     talkId:  number,
+ *     dialogs: Dialog[],
+ *     talkType: QUEST | ...
+ *   }
+ *
+ *   Dialog {
+ *     dialogId:       对话 id；
+ *     contentHash:    正文文本哈希；
+ *     role: {
+ *       type: TALK_ROLE_NPC | TALK_ROLE_PLAYER | TALK_ROLE_BLACK_SCREEN |
+ *             TALK_ROLE_NONE,
+ *       id:   NPC/角色 id；
+ *       roleId:角色槽位或演出角色索引
+ *     },
+ *     nextDialogs:    对话文件中的疑似线性后继 id 列表；
+ *     showType:       TALK_SHOW_DEFAULT/TALK_SHOW_FORCE_SELECT 等显示方式；
+ *     speakerTitleHash:    对话级讲话者标题文本哈希；
+ *     speakerSubtitleHash: 对话级副标题文本哈希；
+ *     uiType:         DIALOG_UI_*；
+ *     voice/face/actions:配音、表情、演出和其他显示参数
+ *   }
+ *
+ *   当前版本 303401 样本中的对应：
+ *     IOKNFDJFGDH -> talkId
+ *     PFALHAKIILD -> dialogs
+ *     OIFGMOHKPOI -> dialogId
+ *     OACNIBLFFDI -> contentHash
+ *     LFGCLNLPAPB -> role 对象（_type、_id、_roleId）
+ *     KMLAFCBMFEI -> nextDialogs
+ *     JPAEFCOCNMN -> showType
+ *     ACCOJJPKFCN -> speakerTitleHash
+ *     BKABCBAFIKD -> speakerSubtitleHash
+ *     PHCHECJDJEH -> uiType
+ *   旧数据或其他对象中副标题键名可能显示为 OBOMFPCPKEC 等随机名称；应根据文本值和
+ *   样本定位，不应把某一个混淆键名写死。
+ *
+ *   讲话者语义：
+ *     TALK_ROLE_NPC          _id 指向 NpcExcelConfigData.id；若有对话级标题优先使用标题，
+ *                             否则使用 NPC 名称；不可见 NPC 不作为触发 NPC 名称导出。
+ *     TALK_ROLE_PLAYER       玩家发言，通常使用 #{NICKNAME}；部分数据仍可能带角色槽位。
+ *     TALK_ROLE_BLACK_SCREEN 黑屏/转场文本，不应当按 NPC 处理。
+ *     TALK_ROLE_NONE         没有角色实体；讲话者名称来自对话级标题/显示名称，典型是
+ *                             “依稀可以辨认的布告”这类文本对象。
+ *
+ *   nextDialogs 是正文对象中保存的局部后继提示，不一定覆盖 InterAction 的条件跳转、
+ *   重试分支或动作组跳转。因此它适合补充线性链，不能单独视为完整对话图。
+ *
+ * 九、TalkExcelConfigData 与悬浮字幕
+ *
+ *   ExcelBinOutput/TalkExcelConfigData_0.json、TalkExcelConfigData_1.json 是另一套较为
+ *   规整的对话索引。它们和 BinOutput/Talk/Quest 的正文不是一一替代关系，但可用来把
+ *   talk id 连接到初始 dialog、NPC、条件、演出路径和优先级：
+ *
+ *   {
+ *     id:          talkId；
+ *     questId:     所属任务 id；
+ *     initDialog:  首个 dialog id；
+ *     npcId:       NPC id 列表；
+ *     beginWay:    开始方式；
+ *     beginCond:   开始条件；
+ *     finishExec:  结束时执行的操作；
+ *     performCfg:  InterAction/QuestDialogue 路径；
+ *     activeMode:  单人/联机模式；
+ *     heroTalk:    TALK_HERO_MAIN 等讲话者类别；
+ *     priority:    同条件对话优先级；
+ *     newTalkFinishTime/onlyQuestNpc: 运行规则开关；
+ *   }
+ *
+ *   ReminderExcelConfigData.json 是悬浮文字/提示音配置，不直接记录所属任务：
+ *
+ *   {
+ *     id:             reminderId；
+ *     speakerTextHash:讲话者名称或标题文本哈希（当前版本常见 BMABALKCELF 等重复字段）；
+ *     contentTextHash:悬浮文字文本哈希（当前版本常见 KNLCFFIONAH 等重复字段）；
+ *     delay:          触发后的延迟；
+ *     showTime:       展示时长/展示规则数值；
+ *     nextReminderId: 链式播放的下一个 reminder id；
+ *     hasAudio:       是否有音频；
+ *     soundEffect:    音效资源；
+ *     style:          Normal、Banner 等展示样式；
+ *   }
+ *
+ *   ReminderIndexExcelConfigData.json 通过 id -> reminderID[] 和 showType（常见 TALK）
+ *   对提示集合进行归组。Reminder 与任务的严格关系通常要从任务动作、InterAction 或
+ *   Lua 通知链继续追溯；只按 reminderId 数字前缀推断任务是不可靠的。
+ *
+ * 十、条件 Condition
+ *
+ *   {
+ *     type:       QUEST_COND_* 或 QUEST_CONTENT_*；
+ *     params:     原始参数数组，顺序有意义；
+ *     logic:      外层条件组合逻辑；
+ *   }
+ *
+ *   常见参数解释：
+ *     QUEST_CONTENT_COMPLETE_TALK -> 参数第 1 位是 talkId；
+ *     QUEST_COND_STATE_EQUAL、QUEST_COND_STATE_NOT_EQUAL、
+ *     QUEST_COND_QUEST_STATE_NOT_EQUAL -> 参数第 1 位是 stepId/外部步骤 id，
+ *                                         第 2 位是任务状态值；
+ *     QUEST_STATE_NONE/UNSTARTED/UNFINISHED/FINISHED/FAILED -> 状态枚举；
+ *     QUEST_CONTENT_LUA_NOTIFY、QUEST_CONTENT_FINISH_PLOT -> 任务内容事件，
+ *       需要保留原始参数，不能直接当成完成对话条件；
+ *     QUEST_COND_*_ITEM_*、*_GLOBAL_VAR_*、*_AVATAR_* -> 物品、任务变量、角色状态等
+ *       外部或运行时条件，参数含义由具体 type 决定。
+ *
+ *   QuestGlobalVarConfigData.json 记录可被任务条件读取的全局变量：
+ *     id -> 变量 id；defaultValue -> 初始数值（缺省时通常按 0 或运行时默认值处理）。
+ *   这类变量不等同于某个 step 的 QUEST_STATE，可能跨对话甚至跨任务保存。
+ *
+ *   原始条件对象通常长这样：
+ *     { _type: "QUEST_COND_STATE_EQUAL", _param: ["303401", "2"] }
+ *   也可能经过版本序列化变成其他混淆键；类型和参数数组是最稳定的识别依据。条件的
+ *   logic 不应和 step 的 order 混淆；step order 是展示/配置序号，condition logic 是布尔组合。
+ *
+ * 十一、InterAction 演出结构
+ *
+ *   InterAction/QuestDialogue 的逻辑结构通常是：
+ *
+ *   {
+ *     luaDataPath:       Lua/脚本路径；
+ *     actors:            演出角色、别名、初始位置和显隐；
+ *     group:             按顺序执行的动作组，每组包含若干 action；
+ *     groupId: [
+ *       { index, grpId, nextGrpId, _noCircleNextGrpId }
+ *     ];
+ *     freeStyleDic:      自由演出/角色样式数据；
+ *     startFade/endFade: 首尾淡入淡出；
+ *     talkFlag:          演出标志；
+ *   }
+ *
+ *   动作的公共字段：
+ *     $type、type、actionId、_preActionId、_haveNextAction、_checkNextImmediately、
+ *     _delayTime、_duration、_actionTagList、_flag。
+ *   常见动作类型：
+ *     DIALOG、DIALOG_SELECT、BLACK_SCREEN、CAMERA_MOVE、CAMERA_FOCUS、VISIBLE、
+ *     SOUND、PLAY_EFFECT、SET_ANIMATOR、STEER_TO、REQUEST_MSG、DIALOG_CLEAR。
+ *   DIALOG/DIALOG_SELECT 的对话 id、选择项和后继跳转属于动作参数；条件跳转通常通过
+ *   CONDITION_JUMP_GROUP 或动作组的 nextGrpId/_NextGrpIdList 一类字段表达。动作组按组
+ *   连接关系执行，不等同于 Talk 文件中 nextDialogs 的数组顺序。
+ *
+ * 十二、当前任务导出结果的语义
+ *
+ *   Task {
+ *     id, type, name, description, unlockDescription, chapter, showType,
+ *     activityId, mainQuestTag, suggestTrackMainQuestList, prevMainQuestList,
+ *     steps: Step[], talks: TalkSegment[]
+ *   }
+ *
+ *   Step {
+ *     id, order, listShowType, description, finishConditions, guide?
+ *   }
+ *
+ *   TalkSegment {
+ *     id, priority, completionStepIds, beginWay, beginConditions, mark,
+ *     performCfg, trigger: { objectNames, points }, dialogs
+ *   }
+
+ *   Dialog {
+ *     id, content, roleType, nextDialogs, showType?, speakerName?,
+ *     speakerTitle?, speakerSubtitle?
+ *   }
+
+ *   completionStepIds 由步骤的 QUEST_CONTENT_COMPLETE_TALK 反向建立，只表示该对话被
+ *   哪些步骤的完成条件直接引用；它不是对话实际出现时刻，也不是完整的步骤依赖图。
+ *   points 中的坐标只保留解析出的 sceneId、pointId（若有）和三维坐标；原始字符串还
+ *   可能包含朝向、范围等信息，当前任务导出没有把它们当作位置坐标的一部分。
+ *
+ * 十三、尚未可靠定名的字段处理原则
+ *
+ *   1. 优先用固定文本、固定枚举、已知 id 和跨样本变化判断字段，而不是使用混淆键名。
+ *   2. 能确定“是什么类型”但不能确定业务含义时，导出 rawParams/原始值并保留 type。
+ *   3. Quest、Talk、InterAction 中同名形态的数组可能分别表示条件、动作、资源或后继，
+ *      必须结合所在对象和枚举值判断。
+ *   4. 章节顺序、step order、talk priority、dialog nextDialogs 和 InterAction groupId
+ *      是五种不同层级的顺序，不能互相替代。
+ */
