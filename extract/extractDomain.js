@@ -149,6 +149,7 @@ function collateDomain(lang) {
 		// data.displayname = language[obj.displayNameTextMapHash]; // doesn't exist for artifact domains
 		const levelConfigMap = Object.keys(obj.levelConfigMap)[0];
 		let entranceTextMapId = getDomainEntranceTextMapId(getLanguage('EN')[obj.nameTextMapHash], levelConfigMap);
+		if (!entranceTextMapId) return accum;
 		data.entranceId = parseInt(entranceTextMapId.slice(entranceTextMapId.lastIndexOf('_')+1));
 		data.entranceName = language[mapping(entranceTextMapId)];// obj.entryPicPath;
 		data.description = sanitizeDescription(language[obj.descTextMapHash]);
@@ -196,14 +197,17 @@ function collateDomain(lang) {
 		// if(obj.disorderoverride) data.disorder = obj.disorderoverride.map(d => language[d]); // fix not needed anymore
 		data.disorder = xdisorder.filter(d => d.id+'' === Object.keys(obj.levelConfigMap)[0]).map(d => language[d.descTextMapHash]).filter(ele => ele !== '' && ele !== undefined);
 		
-		data.monsterList = obj.previewMonsterList.map(monId => {
+		data.monsterList = (obj.previewMonsterList || []).map(monId => {
 			let monObj = xmonster.find(e => e.id === monId);
+			if (!monObj) return undefined;
 			let des = xdescribe.find(d => d.id === monObj.describeId);
+			let codex = xcodex.find(e => e.describeId === monObj.describeId);
+			if (!des || !codex) return undefined;
 			return {
-				id: xcodex.find(e => e.describeId === monObj.describeId).id, // get codex id
+				id: codex.id, // get codex id
 				name: language[des.nameTextMapHash],
 			}
-		});
+		}).filter(Boolean);
 
 		data.filename_image = obj.entryPicPath;
 

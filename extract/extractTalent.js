@@ -31,7 +31,7 @@ function collateTalent(lang) {
 				let combat = depot.skills.concat([depot.energySkill]) // get array of combat skills IDs
 				// console.log(depot[getPropInherentProudSkillOpens()])
 				// console.log(depot[getPropInherentProudSkillOpens2()])
-				let passive = depot[getPropInherentProudSkillOpens()].reduce((accum2, proud, index) => { // get array of passive skill IDs
+				let passive = (depot[getPropInherentProudSkillOpens()] || []).reduce((accum2, proud, index) => { // get array of passive skill IDs
 					if(obj.id === 10000052 && index === 2) return accum2; // skip hidden cannot cook passive
 					if(proud.proudSkillGroupId) {
 						accum2.push(proud.proudSkillGroupId);
@@ -39,7 +39,7 @@ function collateTalent(lang) {
 					}
 					return accum2;
 				}, []).concat(
-					depot[getPropInherentProudSkillOpens2()].reduce((accum2, proud, index) => {
+					(depot[getPropInherentProudSkillOpens2()] || []).reduce((accum2, proud, index) => {
 						if(proud.proudSkillGroupId) {
 							accum2.push(proud.proudSkillGroupId);
 							unlock_ascension[proud.proudSkillGroupId] = -1;
@@ -178,7 +178,7 @@ let propCostItems = undefined;
 function getPropCostItems() {
 	if(propCostItems !== undefined) return propCostItems;
 	for (let [key, value] of Object.entries(xpassive[0])) {
-		if (Array.isArray(value) && value[0] && value[0].count === 0) {
+		if (Array.isArray(value) && value.every(item => typeof item === 'object' && item !== null && !Array.isArray(item)) && value.some(item => item.count === 0 || Object.keys(item).length === 0)) {
 			propCostItems = key;
 			return propCostItems;
 		}

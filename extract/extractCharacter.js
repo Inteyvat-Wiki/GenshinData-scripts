@@ -13,7 +13,7 @@ const xsubstat = getExcel('AvatarPromoteExcelConfigData');
 const associationToCityId = {
 	'ASSOC_LIYUE': 2,
 	'ASSOC_MONDSTADT': 1,
-	'ASSOC_FATUI': 8758412,
+	'ASSOC_FATUI': 8,
 	'ASSOC_INAZUMA': 3,
 	'ASSOC_MAINACTOR': '',
 	'ASSOC_RANGER': '',
@@ -223,7 +223,7 @@ let propCostItems = undefined;
 function getPropCostItems() {
 	if(propCostItems !== undefined) return propCostItems;
 	for (let [key, value] of Object.entries(xsubstat[0])) {
-		if (Array.isArray(value) && value[0].count === 0) {
+		if (Array.isArray(value) && value.every(item => typeof item === 'object' && item !== null && !Array.isArray(item)) && value.some(item => item.count === 0 || Object.keys(item).length === 0)) {
 			propCostItems = key;
 			return propCostItems;
 		}

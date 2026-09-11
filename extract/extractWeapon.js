@@ -60,7 +60,7 @@ function collateWeapon(lang) {
 				let ref = xrefine.find(ele => ele.affixId === affixId+offset);
 				if(ref === undefined) break;
 				if(offset === 0) {
-					data.effectName = language[ref.nameTextMapHash]; // 1* weapons dont have effects
+					data.effectName = sanitizer(language[ref.nameTextMapHash], removeHashtag, replaceGenderM); // 1* weapons dont have effects
 					validateString(data.effectName, 'weapon.effectName', lang);
 				}
 
@@ -101,13 +101,14 @@ function collateWeapon(lang) {
 		for(let i = 1; i <= (obj.rankLevel <= 2 ? 4 : 6); i++) {
 			// 1 and 2 star weapons only have 4 ascensions instead of 6
 			let apromo = xsubstat.find(ele => ele.weaponPromoteId === obj.weaponPromoteId && ele[getPromoteLevel()] === i);
+			if (!apromo) continue;
 			costs['ascend'+i] = [{
 				id: 202,
 				name: language[moraNameTextMapHash],
 				count: apromo.coinCost || 0
 			}];
 
-			for(let items of apromo[getPropCostItems()]) {
+			for(let items of (apromo[getPropCostItems()] || [])) {
 				if(items.id === 0) continue;
 				if(items.id === undefined) continue;
 				costs['ascend'+i].push({
@@ -186,7 +187,7 @@ let propCostItems = undefined;
 function getPropCostItems() {
 	if(propCostItems !== undefined) return propCostItems;
 	for (let [key, value] of Object.entries(xsubstat[0])) {
-		if (Array.isArray(value) && value[0].count === 0) {
+		if (Array.isArray(value) && value.every(item => typeof item === 'object' && item !== null && !Array.isArray(item)) && value.some(item => item.count === 0 || Object.keys(item).length === 0)) {
 			propCostItems = key;
 			return propCostItems;
 		}
