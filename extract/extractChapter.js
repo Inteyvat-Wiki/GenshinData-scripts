@@ -10,6 +10,7 @@ function getText(language, textMapHash) {
 function collateChapter(lang) {
 	const language = getLanguage(lang);
 	const mainQuestIdsByChapterId = new Map();
+	const dupeCheck = {};
 
 	for (const mainQuest of xmainquest) {
 		if (!mainQuest.chapterId) continue;
@@ -28,13 +29,15 @@ function collateChapter(lang) {
 		if (!filename) return accum;
 		if (taskIds.length === 0) return accum;
 
-		accum[filename] = {
+		const data = {
 			id: chapter.id,
 			name,
 			numberName,
 			filename_icon: chapter.chapterIcon || '',
 			taskIds
 		};
+		checkDupeName(data, dupeCheck);
+		accum[filename] = data;
 
 		return accum;
 	}, {});
