@@ -773,11 +773,6 @@ function collateTask(language, quest) {
 	};
 }
 
-function getTaskBaseName(quest) {
-	const title = getLanguage('EN')[getTaskTitleTextMapHash(quest)];
-	return makeFileName(title || '') || String(getQuestId(quest));
-}
-
 function collateTasks(languageCode = 'CHS') {
 	const language = getLanguage(languageCode);
 	const filenames = {};
@@ -792,33 +787,18 @@ function collateTasks(languageCode = 'CHS') {
 			if (aIsIdName !== bIsIdName) return aIsIdName - bIsIdName;
 			return (a._sourceFile || '').localeCompare(b._sourceFile || '');
 		});
-
-	// 统计 base 名称出现次数，找出有重名的
-	const baseCounts = new Map();
-	for (const quest of quests) {
-		const base = getTaskBaseName(quest);
-		baseCounts.set(base, (baseCounts.get(base) || 0) + 1);
-	}
-
 	return quests.map(quest => {
 		const task = collateTask(language, quest);
-		const base = getTaskBaseName(quest);
-		let filename = base;
-
-		// 出现重复文件名：先追加 -${id}
-		if (baseCounts.get(base) > 1) {
-			filename = `${base}-${task.id}`;
-			// 仍重复：去掉追加的 id，改为追加 -${原始数据文件名}
-			if (filenames[filename] !== undefined) {
-				filename = `${base}-${quest._sourceFile || task.id}`;
-			}
-			// 保底：若源文件名与 id 相同仍冲突，追加序号直到唯一
+		let filename = makeUniqueFileName(getTaskTitleTextMapHash(quest), filenames);
+		if (!filename) {
+			filename = String(task.id);
 			let i = 1;
 			while (filenames[filename] !== undefined) {
-				filename = `${base}-${quest._sourceFile || task.id}-${String(i++).padStart(2, '0')}`;
+				filename = `${task.id}-${String(i++).padStart(2, '0')}`;
 			}
 		}
 
+		task.alias = `Quest ${task.id}, File ${quest._sourceFile}`;
 		filenames[filename] = task;
 		return [filename, task];
 	})
@@ -1234,7 +1214,7 @@ module.exports = collateTasks;
  * 十二、当前任务导出结果的语义
  *
  *   Task {
- *     id, type, name, description, unlockDescription, chapter, showType,
+ *     id, alias, type, name, description, unlockDescription, chapter, showType,
  *     activityId, mainQuestTag, suggestTrackMainQuestList, prevMainQuestList,
  *     steps: Step[], talks: TalkSegment[]
  *   }
