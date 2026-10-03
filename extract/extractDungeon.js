@@ -46,10 +46,9 @@ function collateDungeon(lang) {
 
         data.tabs = [];
         let tabs_id = [];
-        if (xpoint[obj.sceneId][key_entry][obj.dungeonEntryId]) {
-            for (let tab_id of xpoint[obj.sceneId][key_entry][obj.dungeonEntryId][key_dungeon]) {
-                tabs_id.push(tab_id);
-            }
+        const dungeonIds = xpoint[obj.sceneId][key_entry][obj.dungeonEntryId]?.[key_dungeon];
+        if (Array.isArray(dungeonIds)) {
+            tabs_id.push(...dungeonIds);
         }
         
         for (let i of obj.descriptionCycleRewardList) {

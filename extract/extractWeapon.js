@@ -2,6 +2,8 @@ require('./global.js');
 
 const xweapon = getExcel('WeaponExcelConfigData');
 const xrefine = getExcel('EquipAffixExcelConfigData');
+const documentById = new Map(getExcel('DocumentExcelConfigData').map(obj => [obj.id, obj]));
+const localizationById = new Map(getExcel('LocalizationExcelConfigData').map(obj => [obj.id, obj]));
 
 const moraNameTextMapHash = getExcel('MaterialExcelConfigData').find(ele => ele.id === 202).nameTextMapHash;
 const xmat = getExcel('MaterialExcelConfigData');
@@ -39,7 +41,7 @@ function collateWeapon(lang) {
 		data.weaponText = language[weaponTextMapHash[obj.weaponType]];
 		data.rarity = obj.rankLevel;
 
-		data.story = getReadable(`Weapon${obj.id}${(lang != 'CHS') ? ('_' + lang) : ''}`, lang);
+		data.story = getWeaponStory(obj, lang);
 
 		if(obj.weaponProp[0].propType !== 'FIGHT_PROP_BASE_ATTACK') console.log(obj,'weapon did not find base atk');
 		data.baseAtkValue = obj.weaponProp.find(obj => obj.propType === 'FIGHT_PROP_BASE_ATTACK').initValue;
@@ -158,6 +160,23 @@ function collateWeapon(lang) {
 	}, {});
 	
 	return myweapon;
+}
+
+function getWeaponStory(weapon, lang) {
+	const document = documentById.get(weapon.storyId);
+	if (!document || !document.questIDList?.length) {
+		const story = getReadable(`Weapon${weapon.id}${lang != 'CHS' ? '_' + lang : ''}`, lang);
+		return story ? [story] : [];
+	}
+
+	return document.questIDList.map(id => localizationById.get(id))
+		.filter(Boolean)
+		.map(localization => lang === 'CHS'
+			? Object.values(localization).find(value => typeof value === 'string' && value.includes('/CHS/'))
+			: localization[lang === 'CHT' ? 'tcPath' : `${lang.toLowerCase()}Path`])
+		.filter(Boolean)
+		.map(path => getReadable(path.split(/[\\/]/).pop().replace(/\.txt$/, ''), lang))
+		.filter(text => text !== '');
 }
 
 let promoteLevel = undefined;

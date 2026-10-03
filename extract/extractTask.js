@@ -97,8 +97,8 @@ function getQuestKeys() {
 		title: findKey(quest, value => textMapValueEquals(chinese, value, sampleQuestTitleText), 'quest title'),
 		description: findKey(quest, value => textMapValueEquals(chinese, value, sampleQuestDescriptionText), 'quest description'),
 		chapterId: findKey(quest, value => value === 1609, 'chapter id'),
-		taskShowType: findKey(quest, value =>
-			value === 'QUEST_SHOW' || value === 'QUEST_HIDDEN', 'task show type'),
+		taskShowType: Object.keys(quest).find(key =>
+			quest[key] === 'QUEST_SHOW' || quest[key] === 'QUEST_HIDDEN'),
 		steps: findKey(quest, value =>
 			Array.isArray(value) && value.some(step =>
 				isObject(step) &&
@@ -168,14 +168,13 @@ function getStepKeys() {
 
 	const chinese = getLanguage('CHS');
 	const { first, second } = getStepSamples();
-	const { hidden, shown } = getStepDisplaySamples();
+	const { hidden } = getStepDisplaySamples();
 
 	stepKeys = {
 		stepId: findKey(first, value => value === 303401, 'step id'),
 		order: findKey(first, (value, key) => value === 1 && second[key] === 2, 'step order'),
 		description: findKey(first, value => textMapValueEquals(chinese, value, sampleFirstStepText), 'step description'),
-		listShowType: findKey(hidden, (value, key) =>
-			value === 'QUEST_HIDDEN' && shown[key] === 'QUEST_SHOW', 'step show type'),
+		listShowType: findKey(hidden, value => value === 'QUEST_HIDDEN', 'step show type'),
 		guide: findKey(second, value => isObject(value) && objectHasPositionParam(value), 'step guide'),
 		finishConditions: findKey(first, value =>
 			Array.isArray(value) && value.some(condition =>
@@ -201,7 +200,8 @@ function detectListShowTypeKey(steps) {
 	}
 
 	return Array.from(countsByKey)
-		.find(([, values]) => values.has('QUEST_SHOW') && values.has('QUEST_HIDDEN'))?.[0] || '';
+		.find(([, values]) => values.has('QUEST_SHOW') && values.has('QUEST_HIDDEN'))?.[0] ||
+		Array.from(countsByKey).find(([, values]) => values.has('QUEST_HIDDEN'))?.[0] || '';
 }
 
 function getStepListShowTypeKeys() {
@@ -269,11 +269,11 @@ function getTalkConfigKeys() {
 				objectHasValue(condition, 'QUEST_COND_STATE_EQUAL') &&
 				objectHasArrayValue(condition, 303401, true)
 			), 'talk config begin conditions'),
-		beginLogic: findKey(talkConfig, (value, key) =>
-			value === 'LOGIC_NONE' && optionalTalkConfig[key] === 'LOGIC_OR', 'talk config begin condition logic'),
+		beginLogic: findKey(optionalTalkConfig, value =>
+			value === 'LOGIC_OR', 'talk config begin condition logic'),
 		beginWay: findKey(talkConfig, value => value === 'TALK_BEGIN_MANUAL', 'talk config begin way'),
-		mark: findKey(talkConfig, value =>
-			typeof value === 'string' && value.startsWith('TALK_MARK_'), 'talk config mark'),
+		mark: Object.keys(talkConfig).find(key =>
+			typeof talkConfig[key] === 'string' && talkConfig[key].startsWith('TALK_MARK_')),
 		performCfg: findKey(talkConfig, value =>
 			typeof value === 'string' && value.startsWith('QuestDialogue/'), 'talk config perform cfg')
 	};
@@ -320,7 +320,7 @@ function getTalkKeys() {
 		), 'talk dialog list');
 	const sampleDialog = sampleTalk[dialogList].find(dialog => objectHasValue(dialog, 30340101));
 
-	const subtitleTalk = getBin('Talk/Quest/00832db3');
+	const subtitleTalk = getBin('Talk/Quest/4024526');
 	const subtitleDialogs = subtitleTalk[dialogList];
 	const subtitleDialog = subtitleDialogs.find(dialog => objectHasValue(dialog, 402452601));
 	const speakerTitleTalk = getBin('Talk/Quest/7504417');
@@ -330,6 +330,11 @@ function getTalkKeys() {
 		), 'speaker title dialog list');
 	const speakerTitleDialog = speakerTitleTalk[speakerTitleDialogList]
 		.find(dialog => objectHasValue(dialog, 750441701));
+	const selectTalk = getBin('Talk/Quest/7715404');
+	const selectDialog = Object.values(selectTalk)
+		.find(value => Array.isArray(value) && value.some(dialog =>
+			isObject(dialog) && objectHasValue(dialog, 771540406)))
+		.find(dialog => objectHasValue(dialog, 771540406));
 
 	talkKeys = {
 		talkId: findKey(sampleTalk, value => value === 303401, 'talk id'),
@@ -337,12 +342,12 @@ function getTalkKeys() {
 		dialogId: findKey(sampleDialog, value => value === 30340101, 'dialog id'),
 		content: findKey(sampleDialog, value => textMapValueEquals(chinese, value, sampleDialogText), 'dialog content'),
 		next: findKey(sampleDialog, value => Array.isArray(value) && value.includes(30340102), 'next dialogs'),
-		speaker: findKey(sampleDialog, value => isObject(value) && value._type === 'TALK_ROLE_NPC', 'speaker'),
+		speaker: findKey(sampleDialog, value => isObject(value) && value.type === 'TALK_ROLE_NPC', 'speaker'),
 		subtitle: findKey(subtitleDialog, value => textMapValueEquals(chinese, value, sampleSubtitleText), 'speaker subtitle'),
 		speakerTitle: findKey(speakerTitleDialog,
 		value => textMapValueEquals(chinese, value, sampleSpeakerTitleText), 'speaker title'),
-		showType: findKey(sampleDialog,
-			value => value === 'TALK_SHOW_DEFAULT' || value === 'TALK_SHOW_FORCE_SELECT',
+		showType: findKey(selectDialog,
+			value => value === 'TALK_SHOW_FORCE_SELECT',
 			'dialog show type')
 	};
 
@@ -445,9 +450,9 @@ function parsePositionParams(params) {
 function makeDialog(language, dialog) {
 	const keys = getTalkKeys();
 	const speakerInfo = dialog[keys.speaker] || {};
-	const roleType = speakerInfo._type || '';
+	const roleType = speakerInfo.type || speakerInfo._type || '';
 	const speakerName = roleType === 'TALK_ROLE_NPC'
-		? getNpcName(language, speakerInfo._id)
+		? getNpcName(language, speakerInfo.id || speakerInfo._id)
 		: roleType === 'TALK_ROLE_PLAYER'
 			? '#{NICKNAME}'
 			: '';
@@ -763,7 +768,8 @@ function collateTask(language, quest) {
 		description,
 		unlockDescription,
 		chapter: getChapterTitle(language, quest[questKeys.chapterId]),
-		showType: quest[questKeys.taskShowType],
+		showType: (questKeys.taskShowType && quest[questKeys.taskShowType]) ||
+			mainQuest?.showType || 'QUEST_SHOW',
 		activityId: mainQuest ? mainQuest.activityId : 0,
 		mainQuestTag: mainQuest ? mainQuest.mainQuestTag : '',
 		suggestTrackMainQuestList: mainQuest ? mainQuest.suggestTrackMainQuestList : [],
@@ -876,7 +882,7 @@ module.exports = collateTasks;
  *     descTextMapHash:            任务描述文本哈希；
  *     unlockDescTextMapHash:      解锁条件/解锁描述文本哈希；
  *     chapterId:                  所属章节 id；
- *     showType:                   主任务是否在任务列表显示，常见为 QUEST_SHOW/QUEST_HIDDEN；
+ *     showType:                   显式值通常为 QUEST_HIDDEN；缺省时按 QUEST_SHOW 处理；
  *     activityId:                 关联活动 id，没有时通常为空或 0；
  *     mainQuestTag:               任务标签，如 MAINQUEST_TAG_GUIDE；
  *     suggestTrackMainQuestList:  推荐追踪的后续主任务列表，属于提示关系；
@@ -901,7 +907,7 @@ module.exports = collateTasks;
  *     LKAHEACOLML -> titleTextMapHash
  *     OANENPOPCFO -> descTextMapHash
  *     BEADANLODNC -> chapterId
- *     OOBHMECAOMO -> taskShowType/showType
+ *     OOBHMECAOMO -> 部分 Quest 根对象的 showType；字段可能缺省，主任务表提供隐藏标记
  *     OHGFCOEOKNE -> suggestTrackMainQuestList
  *     EBNBLBEIFFJ -> steps
  *     OJACLOOEAMG -> talkConfigs
@@ -966,7 +972,7 @@ module.exports = collateTasks;
  *     titleHash:     number,
  *     descriptionHash:number,
  *     chapterId:     number,
- *     showType:      QUEST_SHOW | QUEST_HIDDEN,
+ *     showType?:     QUEST_SHOW | QUEST_HIDDEN（可缺省；缺省时再读主任务表，默认 QUEST_SHOW），
  *     mainQuestType: AQ | SQ | LQ | WQ | EQ | ...,
  *     steps:         StepConfig[],
  *     talkConfigs:   TalkConfig[],
@@ -980,7 +986,7 @@ module.exports = collateTasks;
  *     LKAHEACOLML -> titleHash
  *     OANENPOPCFO -> descriptionHash
  *     BEADANLODNC -> chapterId
- *     OOBHMECAOMO -> showType
+ *     OOBHMECAOMO -> 部分数据中的 showType（不是所有 Quest 根对象都有）
  *     ALBFHGKNMLK -> mainQuestType
  *     EBNBLBEIFFJ -> steps
  *     OJACLOOEAMG -> talkConfigs

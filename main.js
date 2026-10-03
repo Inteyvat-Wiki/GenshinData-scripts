@@ -17,6 +17,7 @@ function exportGenshinData() {
 	exportCurve('weapons', 'WeaponCurveExcelConfigData')
 	exportData('artifacts', require('./extract/extractArtifact.js'));
 	exportData('foods', require('./extract/extractFood'));
+	exportData('questitems', require('./extract/extractQuestItem'));
 	exportData('materials', require('./extract/extractMaterial')); // change: used both TextList/JumpList.
 	exportData('books', require('./extract/extractBook.js'));
 	exportData('domains', require('./extract/extractDomain')); // in the future use levelConfigMap to manually map to domain entrance name
