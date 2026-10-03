@@ -9,6 +9,11 @@ const xnpc = getExcel('NpcExcelConfigData');
 const xchapter = getExcel('ChapterExcelConfigData');
 const xmainquest = getExcel('MainQuestExcelConfigData');
 const xmainquestrelate = getExcel('MainQuestFmtQuestRelateExcelConfigData');
+const givingById = new Map(getExcel('GivingExcelConfigData').map(obj => [obj.id, obj]));
+const givingGroupById = new Map(getExcel('GivingGroupExcelConfigData').map(obj => [obj.id, obj]));
+const rewardById = new Map(getExcel('RewardExcelConfigData').map(obj => [obj.rewardId, obj]));
+const questItemIds = new Set(getExcel('MaterialExcelConfigData')
+	.filter(obj => obj.materialType === 'MATERIAL_QUEST').map(obj => obj.id));
 
 const questDir = path.join(config.GenshinData_folder, 'BinOutput', 'Quest');
 const talkQuestDir = path.join(config.GenshinData_folder, 'BinOutput', 'Talk', 'Quest');
@@ -669,12 +674,64 @@ function makeStep(language, step, questId) {
 		order: getStepOrder(step) || 0,
 		listShowType: getStepShowType(step),
 		description: getStepDescription(language, step),
-		finishConditions: getStepFinishConditions(step).map(makeCondition)
+		finishConditions: getStepFinishConditions(step).map(makeCondition),
+		itemOperations: getStepItemOperations(step)
 	};
 
 	if (guide) data.guide = guide;
 
 	return data;
+}
+
+function getStepItemOperations(step) {
+	const operations = [];
+	for (const actions of getObjectArrayValues(step)) {
+		for (const action of actions) {
+			const type = getConditionType(action);
+			const params = getConditionParams(action);
+			if (type === 'QUEST_EXEC_ACTIVE_ITEM_GIVING') {
+				const givingId = Number(params[0]);
+				const giving = givingById.get(givingId);
+				if (!giving) continue;
+				operations.push({
+					action: 'give', givingId,
+					...(giving.givingGroupIds?.length ? {
+						choices: [...new Set(giving.givingGroupIds.flatMap(id => givingGroupById.get(id)?.itemIds || []))]
+							.map(id => ({ id })),
+						count: giving.givingGroupCount
+					} : {}),
+					items: (giving.exactItems || []).filter(item => item.id)
+						.map(item => ({ id: item.id, count: item.count || 1 })),
+					remove: giving.isRemoveItem === true
+				});
+			} else if (type === 'QUEST_EXEC_DEL_PACK_ITEM') {
+				const id = Number(params[0]);
+				const count = Number(params[1]);
+				if (Number.isInteger(id) && id > 0 && Number.isInteger(count) && count >= 0) {
+					operations.push({ action: 'remove', items: [{ id, count }] });
+				}
+			} else if (type === 'QUEST_EXEC_DEL_PACK_ITEM_BATCH') {
+				const items = String(params[0] || '').split(',').map(item => {
+					const [id, count] = item.split(':').map(Number);
+					return { id, count };
+				}).filter(item => Number.isInteger(item.id) && item.id > 0 && item.count > 0);
+				if (items.length) operations.push({ action: 'remove', items });
+			} else if (type === 'QUEST_EXEC_DEL_ALL_SPECIFIC_PACK_ITEM') {
+				const id = Number(params[0]);
+				if (Number.isInteger(id) && id > 0) operations.push({ action: 'remove', items: [{ id, count: null }] });
+			}
+		}
+	}
+	return operations;
+}
+
+function getTaskRewardOperations(quest) {
+	return (quest.rewardIdList || []).flatMap(rewardId => {
+		const items = (rewardById.get(rewardId)?.rewardItemList || [])
+			.filter(item => questItemIds.has(item.itemId))
+			.map(item => ({ id: item.itemId, count: item.itemCount }));
+		return items.length ? [{ action: 'obtain', rewardId, items }] : [];
+	});
 }
 
 function makeTalkSegment(language, talkId, talkConfig, stepsByTalkId) {
@@ -710,6 +767,7 @@ function makeTalkSegment(language, talkId, talkConfig, stepsByTalkId) {
 
 	return segment;
 }
+
 
 function collectCompleteTalkIds(step) {
 	const fileMap = buildTalkFileMap();
@@ -774,6 +832,7 @@ function collateTask(language, quest) {
 		mainQuestTag: mainQuest ? mainQuest.mainQuestTag : '',
 		suggestTrackMainQuestList: mainQuest ? mainQuest.suggestTrackMainQuestList : [],
 		prevMainQuestList: mainQuestRelate ? mainQuestRelate[mainQuestRelateKeys.prevMainQuestList] : [],
+		itemOperations: getTaskRewardOperations(quest),
 		steps,
 		talks
 	};

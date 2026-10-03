@@ -83,9 +83,21 @@ function copyFileIfChanged(sourcePath, targetPath) {
 }
 
 function writeManifest(manifestPath, files) {
+	const givings = require(path.join(config.GenshinData_folder, 'ExcelBinOutput', 'GivingExcelConfigData.json'));
+	const groups = new Map(require(path.join(config.GenshinData_folder, 'ExcelBinOutput', 'GivingGroupExcelConfigData.json'))
+		.map(group => [group.id, group]));
 	const manifest = {
 		source: 'BinOutput/InterAction',
-		files: files.map(file => file.slice(0, -'.json'.length))
+		files: files.map(file => file.slice(0, -'.json'.length)),
+		givings: Object.fromEntries(givings.map(giving => [giving.id, {
+			...(giving.givingGroupIds?.length ? {
+				choices: [...new Set(giving.givingGroupIds.flatMap(id => groups.get(id)?.itemIds || []))].map(id => ({ id })),
+				count: giving.givingGroupCount
+			} : {}),
+			items: (giving.exactItems || []).filter(item => item.id)
+				.map(item => ({ id: item.id, count: item.count || 1 })),
+			remove: giving.isRemoveItem === true
+		}]))
 	};
 
 	fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
