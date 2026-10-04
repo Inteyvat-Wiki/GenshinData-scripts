@@ -29,6 +29,7 @@ let stepKeys;
 let stepListShowTypeKeys;
 let conditionKeys;
 let talkConfigKeys;
+let nextTalkKeys;
 let talkFileById;
 let talkDataById;
 let questList;
@@ -263,6 +264,9 @@ function getTalkConfigKeys() {
 		objectHasStringValueIncluding(talkConfig, 'Q303450'));
 
 	if (!talkConfig || !optionalTalkConfig) throw new Error('tasks: failed to locate sample talk config');
+	const nextTalkConfig = getObjectArrayValues(getBin('Quest/77104'))
+		.flat().find(value => isObject(value) && objectHasValue(value, 7710404) &&
+			objectHasStringValueIncluding(value, 'Q7710404'));
 
 	talkConfigKeys = {
 		talkId: findKey(talkConfig, value => value === 303401, 'talk config id'),
@@ -277,6 +281,8 @@ function getTalkConfigKeys() {
 		beginLogic: findKey(optionalTalkConfig, value =>
 			value === 'LOGIC_OR', 'talk config begin condition logic'),
 		beginWay: findKey(talkConfig, value => value === 'TALK_BEGIN_MANUAL', 'talk config begin way'),
+		nextTalks: findKey(nextTalkConfig, value => Array.isArray(value) &&
+			value.includes(7710412) && value.includes(7710413), 'talk config next talks'),
 		mark: Object.keys(talkConfig).find(key =>
 			typeof talkConfig[key] === 'string' && talkConfig[key].startsWith('TALK_MARK_')),
 		performCfg: findKey(talkConfig, value =>
@@ -594,6 +600,23 @@ function getTalkConfigString(talkConfig, configuredKey, prefix) {
 		'';
 }
 
+function getTalkConfigNextTalks(talkConfig) {
+	if (!nextTalkKeys) {
+		const keys = new Set([getTalkConfigKeys().nextTalks]);
+		for (const quest of getQuestList()) {
+			if (!objectHasValue(quest, 77104)) continue;
+			for (const sample of getObjectArrayValues(quest).flat()) {
+				if (!isObject(sample) || !objectHasValue(sample, 7710404)) continue;
+				for (const [key, value] of Object.entries(sample)) {
+					if (Array.isArray(value) && value.includes(7710413)) keys.add(key);
+				}
+			}
+		}
+		nextTalkKeys = Array.from(keys);
+	}
+	return nextTalkKeys.map(key => talkConfig[key]).find(Array.isArray) || [];
+}
+
 function getQuestTalkConfigs(quest, questId) {
 	const keys = getQuestKeys();
 	const configuredTalks = quest[keys.talkConfigs];
@@ -751,6 +774,7 @@ function makeTalkSegment(language, talkId, talkConfig, stepsByTalkId) {
 			: 0,
 		completionStepIds: completionSteps.map(step => getStepId(step, Math.floor(talkId / 100))),
 		beginWay: talkConfig ? getTalkConfigString(talkConfig, talkConfigKeys.beginWay, 'TALK_BEGIN_') : '',
+		nextTalks: talkConfig ? getTalkConfigNextTalks(talkConfig) : [],
 		beginConditions: talkConfig
 			? makeConditionGroup(
 				getTalkConfigBeginConditions(talkConfig),
@@ -759,6 +783,7 @@ function makeTalkSegment(language, talkId, talkConfig, stepsByTalkId) {
 		mark: talkConfig ? getTalkConfigString(talkConfig, talkConfigKeys.mark, 'TALK_MARK_') : '',
 		performCfg: talkConfig ? getTalkConfigString(talkConfig, talkConfigKeys.performCfg, 'QuestDialogue/') : '',
 		trigger: {
+			objectIds: talkConfig ? getTalkConfigNpcIds(talkConfig) : [],
 			objectNames: triggerNpcNames,
 			points: talkConfig ? getTalkConfigPoints(talkConfig) : []
 		},
@@ -1104,6 +1129,8 @@ module.exports = collateTasks;
  *     mainQuestId:     所属主任务 id；
  *     npcIds:          触发/参与该段对话的 NPC id 列表；
  *     beginWay:        TALK_BEGIN_*，手动、自动等开始方式；
+ *     nextTalks:       当前段结束后尝试接续的 talk id 列表，允许分支与汇合；
+ *                      不等于后继的 beginConditions，也不能据此排除其他启动入口；
  *     beginConditions: 对话段出现条件数组；
  *     beginLogic:      条件组合逻辑，如 LOGIC_NONE、LOGIC_AND、LOGIC_OR；
  *     mark:            TALK_MARK_*，对话标记；
@@ -1289,8 +1316,8 @@ module.exports = collateTasks;
  *   }
  *
  *   TalkSegment {
- *     id, priority, completionStepIds, beginWay, beginConditions, mark,
- *     performCfg, trigger: { objectNames, points }, dialogs
+ *     id, priority, completionStepIds, beginWay, nextTalks, beginConditions, mark,
+ *     performCfg, trigger: { objectIds, objectNames, points }, dialogs
  *   }
 
  *   Dialog {
