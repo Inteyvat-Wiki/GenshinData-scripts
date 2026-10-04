@@ -20,6 +20,7 @@ function exportGenshinData() {
 	exportData('questitems', require('./extract/extractQuestItem'));
 	exportData('materials', require('./extract/extractMaterial')); // change: used both TextList/JumpList.
 	exportData('books', require('./extract/extractBook.js'));
+	exportData('documents', require('./extract/extractDocument.js'));
 	exportData('domains', require('./extract/extractDomain')); // in the future use levelConfigMap to manually map to domain entrance name
 	exportData('enemies', require('./extract/extractEnemy'));
 	exportCurve('enemies', 'MonsterCurveExcelConfigData');
