@@ -4,6 +4,10 @@ const xdungeon_entry = getExcel('DungeonEntryExcelConfigData');
 const xdungeon = getExcel('DungeonExcelConfigData');
 const xtext = getExcel('ManualTextMapConfigData');
 const xmaterial_source = getExcel('MaterialSourceDataExcelConfigData');
+const xcity = getExcel('CityConfigData');
+const cityByArea = new Map(xcity.flatMap(city =>
+    (city.areaIdVec || []).map(areaId => [areaId, city])
+));
 const xpoint = {
     "3": getBin('Scene/Point/scene3_point'),
 }
@@ -21,6 +25,14 @@ function collateDungeon(lang) {
 
         if (xpoint[obj.sceneId] == undefined) {
             xpoint[obj.sceneId] = getBin(`Scene/Point/scene${obj.sceneId}_point`);
+        }
+
+        const point = xpoint[obj.sceneId][key_entry][obj.dungeonEntryId];
+        // Use the entrance location: a dungeon level's cityID may differ.
+        const city = cityByArea.get(point?.areaId);
+        if (city) {
+            data.regionId = city.cityId;
+            data.regionName = language[city.cityNameTextMapHash];
         }
 
         let name_index = undefined;
