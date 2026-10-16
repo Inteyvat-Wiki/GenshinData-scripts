@@ -175,6 +175,11 @@ function getStepKeys() {
 	const chinese = getLanguage('CHS');
 	const { first, second } = getStepSamples();
 	const { hidden } = getStepDisplaySamples();
+	const failQuest = getBin('Quest/79022');
+	const failStep = getObjectArrayValues(failQuest).flat()
+		.find(step => isObject(step) && objectHasValue(step, 7902210) &&
+			getObjectArrayValues(step).some(conditions => conditions.some(condition =>
+				objectHasValue(condition, 'QUEST_CONTENT_ITEM_LESS_THAN'))));
 
 	stepKeys = {
 		stepId: findKey(first, value => value === 303401, 'step id'),
@@ -187,7 +192,10 @@ function getStepKeys() {
 				isObject(condition) &&
 				objectHasValue(condition, 'QUEST_CONTENT_COMPLETE_TALK') &&
 				objectHasArrayValue(condition, 303401)
-			), 'step finish conditions')
+			), 'step finish conditions'),
+		failConditions: findKey(failStep, value => Array.isArray(value) && value.some(condition =>
+			isObject(condition) && objectHasValue(condition, 'QUEST_CONTENT_ITEM_LESS_THAN') &&
+			objectHasArrayValue(condition, 101945)), 'step fail conditions')
 	};
 
 	return stepKeys;
@@ -500,10 +508,16 @@ function getTaskTitleTextMapHash(quest) {
 function getStepFinishConditions(step) {
 	const stepKeys = getStepKeys();
 	return step[stepKeys.finishConditions] ||
-		Object.values(step).find(value =>
+		step.finishCond || Object.entries(step).find(([key, value]) =>
+			key !== stepKeys.failConditions && key !== 'failCond' &&
 			Array.isArray(value) && value.some(condition =>
-				isObject(condition) && getConditionType(condition).startsWith('QUEST_CONTENT_'))) ||
+				isObject(condition) && getConditionType(condition).startsWith('QUEST_CONTENT_')))?.[1] ||
 		[];
+}
+
+function getStepFailConditions(step) {
+	const keys = getStepKeys();
+	return step[keys.failConditions] || step.failCond || [];
 }
 
 function getStepId(step, questId) {
@@ -698,6 +712,7 @@ function makeStep(language, step, questId) {
 		listShowType: getStepShowType(step),
 		description: getStepDescription(language, step),
 		finishConditions: getStepFinishConditions(step).map(makeCondition),
+		failConditions: getStepFailConditions(step).map(makeCondition),
 		itemOperations: getStepItemOperations(step)
 	};
 
@@ -1102,6 +1117,7 @@ module.exports = collateTasks;
  *     order:           步骤列表/运行顺序，例如 1、2、3；
  *     descriptionHash: 步骤描述文本哈希；
  *     finishConditions:步骤完成条件数组；
+ *     failConditions:  步骤失败条件数组；不是“不满足完成条件”的反面；
  *     guide:           任务指引配置；
  *     listShowType:    QUEST_SHOW 或 QUEST_HIDDEN，控制是否在任务列表显示；
  *     finishParent:    完成该步骤时是否直接推进/完成父任务；
@@ -1325,7 +1341,7 @@ module.exports = collateTasks;
  *   }
  *
  *   Step {
- *     id, order, listShowType, description, finishConditions, guide?
+ *     id, order, listShowType, description, finishConditions, failConditions, guide?
  *   }
  *
  *   TalkSegment {
