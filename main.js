@@ -1,5 +1,17 @@
 
-exportGenshinData();
+require('./versions/textmap').build(require('./config.json'))
+	.then(() => {
+		if (process.argv.includes('--versions-only')) {
+			// Visit all folders for one language at a time so TextMap caching stays
+			// bounded without reparsing every language for every folder.
+			for (const [index, language] of require('./versions/textmap').VERSION_LANGUAGES.entries()) {
+				global.versionExport = { language, merge: index > 0 };
+				exportGenshinData();
+			}
+			delete global.versionExport;
+		} else exportGenshinData();
+	})
+	.catch(error => { console.error(error.stack || error); process.exitCode = 1; });
 
 function exportGenshinData() {
 	const { exportCurve, exportData } = require('./extract/global.js');
@@ -12,7 +24,7 @@ function exportGenshinData() {
 	exportData('stories', require('./extract/extractStory.js'));
 	exportData('chapters', require('./extract/extractChapter.js'));
 	exportData('tasks', require('./extract/extractTask.js'));
-	require('./extract/extractInteraction.js')();
+	if (!global.versionExport) require('./extract/extractInteraction.js')();
 	exportData('weapons', require('./extract/extractWeapon.js'));
 	exportCurve('weapons', 'WeaponCurveExcelConfigData')
 	exportData('artifacts', require('./extract/extractArtifact.js'));

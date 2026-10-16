@@ -11,6 +11,8 @@ function collateStory(lang) {
 		let data = {};
 		data.id = charObj.id;
 		data.name = charObj.name;
+		const avatar = xplayableAvatar.find(avatar => avatar.id === charObj.id);
+		if (avatar) language[avatar.nameTextMapHash]; // Track the copied character name's source.
 		data.stories = [];
 
 		let list = xstory.filter(ele => ele.avatarId === charObj.id);

@@ -5,6 +5,9 @@
   "main": "main.js",
   "scripts": {
     "start": "node main.js",
+    "buildversions": "node versions/textmap.js",
+    "exportversions": "node main.js --versions-only",
+    "test:versions": "node --test versions/*.test.js",
     "buildstats": "node stats/copyStatsData.js && npx webpack --config stats/webpack.all.config.js && npx webpack --config stats/webpack.characters.config.js && npx webpack --config stats/webpack.weapons.config.js",
     "audio": "cd voice && node audio.js"
   },

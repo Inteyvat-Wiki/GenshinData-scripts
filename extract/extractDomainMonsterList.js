@@ -204,6 +204,23 @@ function autocomplete(input, dict) {
 
 const ENmonster = require(`${config.genshin_export_folder}/EN/enemies.json`);
 const ENmonsterNames = Object.values(ENmonster).map(ele => ele.name);
+const codexById = new Map(getExcel('AnimalCodexExcelConfigData').map(row => [row.id, row]));
+const monsterById = new Map(getExcel('MonsterExcelConfigData').map(row => [row.id, row]));
+const descriptionById = new Map(getExcel('MonsterDescribeExcelConfigData').map(row => [row.id, row]));
+
+function monsterNameHash(name) {
+	const enemy = Object.values(ENmonster).find(enemy => enemy.name === name);
+	if (!enemy) throw new Error(`DomainMonsterList: enemy not found for ${name}`);
+	// Exported enemies do not contain nameTextMapHash. Follow the same source
+	// relationship as extractEnemy, using the codex ID before the monster ID.
+	const describeId = codexById.get(enemy.id)?.describeId ??
+		monsterById.get(enemy.monsterId ?? enemy.id)?.describeId;
+	const hash = descriptionById.get(describeId)?.nameTextMapHash;
+	if (!Number.isSafeInteger(hash) || hash <= 0) {
+		throw new Error(`DomainMonsterList: source name hash missing for ${name} (enemy ${enemy.id})`);
+	}
+	return hash;
+}
 
 const ENdomain = require(`${config.genshin_export_folder}/EN/domains.json`);
 const ENdomainNames = Object.values(ENdomain).map(ele => ele.name);
@@ -222,11 +239,13 @@ function collateDomainMonsterList(lang) {
 
 	for(let [dom, monList] of Object.entries(autoMonsterMap)) {
 		const domId = Object.values(ENdomain).find(ele => ele.name === dom).id;
-		const monNameHashList = monList.map(ele => Object.values(ENmonster).find(tmp => tmp.name === ele).nameTextMapHash);
+		const monNameHashList = monList.map(monsterNameHash);
 
 		const monsterlist = monNameHashList.map(NameTextMapHash => language[NameTextMapHash]);
 
-		Object.values(mydomain).find(ele => ele.id === domId).monsterlist = monsterlist;
+		const domain = Object.values(mydomain).find(ele => ele.id === domId);
+		domain.monsterlist = monsterlist;
+		require('../versions/tracking').attach(domain, new Set(monNameHashList));
 	}
 
 	for(let dom of Object.values(mydomain)) {
@@ -240,4 +259,5 @@ function collateDomainMonsterList(lang) {
 	return mydomain;
 }
 
+collateDomainMonsterList.mergeVersions = true;
 module.exports = collateDomainMonsterList;

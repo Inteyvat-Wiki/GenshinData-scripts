@@ -5,6 +5,8 @@ Used by my genshin-db repo
 
 For personal use, edit the `config.json` file. The folder pointed by `GenshinData_folder` must include `ExcelBinOutput`, `TextMap`, and `Readable`.
 
+Exports automatically infer object versions from multilingual TextMap history before extraction. See [TextMap version rules and cache](versions/README.md).
+
 AssetStudioCLI
 `D:\GenshinImpact\AssetStudioCLI\AssetStudioCLI.exe "D:\GenshinImpact\3.7\patch\blocks" "D:\GenshinImpact\3.7\patch" --silent --types "Texture2D" --types "Sprite" --game GI --names "(^UI_.*)|(^Img.*)|(^Icon.*)|(^Eff_UI_Talent.*)|(^Skill_.*)|(^MonsterSkill.*)"`
 

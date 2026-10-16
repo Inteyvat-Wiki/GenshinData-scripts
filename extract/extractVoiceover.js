@@ -16,6 +16,8 @@ function collateVoiceover(lang) {
 		let data = {};
 		data.id = charObj.id;
 		data.name = charObj.name;
+		const avatar = xplayableAvatar.find(avatar => avatar.id === charObj.id);
+		if (avatar) language[avatar.nameTextMapHash]; // Track the copied character name's source.
 
 		let xvoices = xfetter.filter(ele => ele.avatarId === data.id);
 

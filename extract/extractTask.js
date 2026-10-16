@@ -823,6 +823,10 @@ function buildTalkStepMap(steps) {
 }
 
 function collateTask(language, quest) {
+	return require('../versions/tracking').record(() => collateTaskData(language, quest));
+}
+
+function collateTaskData(language, quest) {
 	const questKeys = getQuestKeys();
 	const mainQuestRelateKeys = getMainQuestRelateKeys();
 	const questId = getQuestId(quest);
@@ -864,6 +868,15 @@ function collateTask(language, quest) {
 }
 
 function collateTasks(languageCode = 'CHS') {
+	// Resolve obfuscated field names before recording individual objects: the
+	// sample texts used for schema detection do not belong to the first quest.
+	getQuestKeys();
+	getMainQuestRelateKeys();
+	getStepKeys();
+	getStepListShowTypeKeys();
+	getConditionKeys();
+	getTalkConfigKeys();
+	getTalkKeys();
 	const language = getLanguage(languageCode);
 	const filenames = {};
 	const quests = getQuestList()

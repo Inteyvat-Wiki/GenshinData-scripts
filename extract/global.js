@@ -1,4 +1,6 @@
 const fs = require('fs');
+const textMapTracking = require('../versions/tracking');
+const { VERSION_LANGUAGES } = require('../versions/textmap');
 
 global.config = require('../config.json');
 
@@ -7,16 +9,16 @@ global.getBin = function(path) { return require(`${config.GenshinData_folder}/Bi
 let TextMap = {};
 global.getTextMap = function(langcode) {
 	if (TextMap[langcode]) return TextMap[langcode];
+	// Keep English for filenames and only the current output language.
+	for (const cached of Object.keys(TextMap)) {
+		if (cached !== 'EN' && cached !== langcode) delete TextMap[cached];
+	}
+	const read = suffix => JSON.parse(fs.readFileSync(`${config.GenshinData_folder}/TextMap/${suffix}.json`, 'utf8'));
 	if (['TH', 'RU'].includes(langcode)) {
-		return TextMap[langcode] = Object.assign(require(`${config.GenshinData_folder}/TextMap/TextMap${langcode}_0.json`),
-			require(`${config.GenshinData_folder}/TextMap/TextMap${langcode}_1.json`),
-			require(`${config.GenshinData_folder}/TextMap/TextMap_Medium${langcode}_0.json`),
-			require(`${config.GenshinData_folder}/TextMap/TextMap_Medium${langcode}_1.json`)
-		)
+		return TextMap[langcode] = textMapTracking.languageProxy(Object.assign(read(`TextMap${langcode}_0`),
+			read(`TextMap${langcode}_1`), read(`TextMap_Medium${langcode}_0`), read(`TextMap_Medium${langcode}_1`)));
 	} else {
-		return TextMap[langcode] = Object.assign(require(`${config.GenshinData_folder}/TextMap/TextMap${langcode}.json`),
-			require(`${config.GenshinData_folder}/TextMap/TextMap_Medium${langcode}.json`)
-		)
+		return TextMap[langcode] = textMapTracking.languageProxy(Object.assign(read(`TextMap${langcode}`), read(`TextMap_Medium${langcode}`)));
 	}
 }
 
@@ -326,6 +328,7 @@ if(!xcity.find(ele => getLanguage('EN')[ele[getCityNameTextMapHash()]] === 'Snez
 /* =========================================================================================== */
 
 function exportCurve(folder, file) {
+	if (global.versionExport) return;
 	const xcurve = getExcel(file);
 	let output = {};
 	xcurve.forEach(ele => {
@@ -365,10 +368,14 @@ function exportData(folder, collateFunc, englishonly, skipwrite) {
 
 	const stats = {};
 	const image = {};
+	const versions = {};
 
 	langcodes.forEach(lang => {
+		if (global.versionExport && lang !== global.versionExport.language) return;
 		if(englishonly && lang !== 'EN') return;
-		let data = collateFunc(lang);
+		let data = textMapTracking.collate(collateFunc, lang);
+		if (!skipwrite && VERSION_LANGUAGES.includes(lang)) textMapTracking.accumulateVersions(versions, data, config);
+		if (global.versionExport) return;
 		fs.mkdirSync(`${config.genshin_export_folder}/${lang}`, { recursive: true });
 		fs.mkdirSync(`${config.genshin_output_folder}/${lang_map[lang]}`, { recursive: true });
 		if(!skipwrite) {
@@ -400,6 +407,8 @@ function exportData(folder, collateFunc, englishonly, skipwrite) {
 			// if(data[""]) console.log('empty key found in '+folder);
 		}
 	});
+	if (!skipwrite) textMapTracking.writeVersions(folder, versions, config,
+		collateFunc.mergeVersions === true || global.versionExport?.merge === true);
 
 	if (Object.keys(stats).length > 0) {
 		fs.mkdirSync(`${config.genshin_output_folder}/stats`, { recursive: true });
