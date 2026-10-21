@@ -362,7 +362,7 @@ const lang_map = {
 	'VI': 'Vietnamese'
 }
 
-function exportData(folder, collateFunc, englishonly, skipwrite) {
+function exportData(folder, collateFunc, englishonly, skipwrite, languages = langcodes) {
 	const starttime = Date.now();
 	fs.mkdirSync(`${config.genshin_output_folder}`, { recursive: true });
 
@@ -370,7 +370,7 @@ function exportData(folder, collateFunc, englishonly, skipwrite) {
 	const image = {};
 	const versions = {};
 
-	langcodes.forEach(lang => {
+	languages.forEach(lang => {
 		if (global.versionExport && lang !== global.versionExport.language) return;
 		if(englishonly && lang !== 'EN') return;
 		let data = textMapTracking.collate(collateFunc, lang);
