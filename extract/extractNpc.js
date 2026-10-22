@@ -7,6 +7,7 @@ const { record } = require('../versions/tracking');
 
 const source = config.GenshinData_folder;
 const npcById = new Map(getExcel('NpcExcelConfigData').map(npc => [npc.id, npc]));
+const manualTextById = new Map(getExcel('ManualTextMapConfigData').map(text => [text.textMapId, text]));
 const talkById = new Map([0, 1].flatMap(index => getExcel(`TalkExcelConfigData_${index}`))
 	.map(talk => [talk.id, talk]));
 const read = file => JSON.parse(fs.readFileSync(path.join(source, file), 'utf8'),
@@ -15,6 +16,7 @@ const read = file => JSON.parse(fs.readFileSync(path.join(source, file), 'utf8')
 let groups;
 let bodies;
 let actionKeys;
+let birthPoints;
 
 function findKey(data, predicate, label) {
 	const keys = Object.keys(data).filter(key => predicate(data[key]));
@@ -56,6 +58,37 @@ function getBodies() {
 		}
 	}
 	return bodies;
+}
+
+function getBirthPoints() {
+	if (birthPoints) return birthPoints;
+	birthPoints = new Map();
+	for (const folder of ['SceneNpcBorn', 'SceneNpcBornNoGroup']) {
+		for (const file of fs.readdirSync(path.join(source, `BinOutput/Scene/${folder}`)).filter(file => file.endsWith('.json'))) {
+			const sourceFile = `BinOutput/Scene/${folder}/${file}`;
+			const data = read(sourceFile);
+			for (const point of data.bornPosList || []) {
+				const points = birthPoints.get(point._configId) || [];
+				points.push({
+					sceneId: data.sceneId,
+					id: point._id,
+					position: point._pos ? [point._pos.x, point._pos.y, point._pos.z] : null,
+					...(point.roomId !== undefined ? { roomId: point.roomId } : {}),
+					...(point._groupId !== undefined ? { groupId: point._groupId } : {}),
+					...(point.suiteIdList ? { suiteIds: point.suiteIdList } : {}),
+					...(point._priority !== undefined ? { priority: point._priority } : {}),
+					...(point.preConditions ? { rawConditions: point.preConditions } : {}),
+					...(point._platformInfo?.groupId !== undefined ? { platform: {
+						groupId: point._platformInfo.groupId,
+						configId: point._platformInfo.configId
+					} } : {}),
+					source: sourceFile
+				});
+				birthPoints.set(point._configId, points);
+			}
+		}
+	}
+	return birthPoints;
 }
 
 function getActionKeys() {
@@ -149,11 +182,14 @@ function collateNpc(language, group) {
 	const available = new Set(talks.map(talk => talk.id));
 	const incoming = new Set(talks.flatMap(talk => talk.nextTalks));
 	const entryTalks = [...configured].filter(id => available.has(id) && !incoming.has(id));
+	const title = getText(language, manualTextById.get(`NPC_TITLE_${group.id}`)?.textMapContentTextMapHash);
 	return {
 		id: group.id,
 		name: getNpcName(language, group.id) || getNpcName(getLanguage('CHS'), group.id),
+		...(title ? { title } : {}),
 		alias: `NPC ${group.id}`,
 		source: { group: group.file, resource: group.resource },
+		birthPoints: getBirthPoints().get(group.id) || [],
 		entryTalks,
 		talks,
 		diagnostics
