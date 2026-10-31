@@ -25,6 +25,15 @@ function exportGenshinData() {
 	exportData('chapters', require('./extract/extractChapter.js'));
 	exportData('tasks', require('./extract/extractTask.js'));
 	exportData('npcs', require('./extract/extractNpc.js'));
+	exportData('serenitea', require('./extract/extractSerenitea'), false, false, ['CHS', 'EN']);
+	exportData('tcg', require('./extract/extractTcg'), false, false, ['CHS', 'EN']);
+	exportData('miliastra', require('./extract/extractMiliastra'), false, false, ['CHS', 'EN']);
+	exportData('misc', require('./extract/extractMisc'), false, false, ['CHS', 'EN']);
+	const path = require('node:path');
+	const luaInput = path.resolve(__dirname, process.env.GENSHIN_LUA_PATH || config.Lua_folder || '.cache/lua');
+	if (require('node:fs').existsSync(luaInput)) {
+		exportData('tasksubtitles', require('./extract/extractTaskSubtitles'), false, false, ['CHS', 'EN']);
+	} else console.warn('tasksubtitles not refreshed: configure Lua_folder or GENSHIN_LUA_PATH; existing output retained');
 	if (!global.versionExport) require('./extract/extractInteraction.js')();
 	exportData('weapons', require('./extract/extractWeapon.js'));
 	exportCurve('weapons', 'WeaponCurveExcelConfigData')

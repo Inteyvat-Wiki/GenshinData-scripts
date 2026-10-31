@@ -5,6 +5,12 @@
   "main": "main.js",
   "scripts": {
     "start": "node main.js",
+    "export:misc": "node misc.js",
+    "test:misc": "node --test extract/misc/*.test.js",
+    "export:archives": "node archives.js",
+    "export:subtitles": "node subtitles.js",
+    "test:subtitles": "node extract/subtitles/check_narration.js && node extract/subtitles/check_bubbles.js",
+    "test:archives": "node --test extract/archives/*.test.js && node extract/archives/check_serenitea.js && node extract/archives/check_tcg.js && node extract/archives/check_miliastra.js && node extract/archives/check_dialogues.js",
     "buildversions": "node versions/textmap.js",
     "exportversions": "node main.js --versions-only",
     "test:versions": "node --test versions/*.test.js",
