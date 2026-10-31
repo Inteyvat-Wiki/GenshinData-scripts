@@ -1,3 +1,6 @@
+// Upstream attribution: partial JavaScript translation of Razmoth/Audio's extractor.
+// RazTools/Audio reference: 56da8d491fadf713a9c95d5936c764e6f0a52129 (MIT).
+// See ../LICENSES/MIT-Razmoth-Audio.txt and ../docs/license-provenance.md.
 const fs = require('fs');
 const path = require('path');
 const fnv = require('fnv-plus');

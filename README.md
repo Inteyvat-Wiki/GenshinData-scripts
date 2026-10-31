@@ -1,7 +1,13 @@
 # GenshinData-scripts
-Node scripts to extract data from ExcelBinOutput
+Node scripts to extract data from ExcelBinOutput, independently maintained by Inteyvat-Wiki.
 
-Used by my genshin-db repo
+## 来源、署名与许可
+
+本项目衍生自 [theBowja/GenshinData-scripts](https://github.com/theBowja/GenshinData-scripts)。原作者为 theBowja，后续修改由 Inteyvat-Wiki 组织维护；提交历史保留各贡献者署名。本分支并非上游官方发布，不保证与上游的接口、数据格式及运行方式兼容。
+
+本分支的许可范围见 [LICENSE](LICENSE)：Inteyvat-Wiki 有权授权的自行创作贡献采用 MIT，上游代码保留 ISC 声明，语音提取器涉及的 Razmoth MIT 许可单独保留。上游 ISC 原始文件和版权声明仍未找到，所附标准文本只是明确标注的参考副本，不代表核验全部完成。详细溯源见 [许可来源记录](docs/license-provenance.md) 和 [NOTICES.md](NOTICES.md)。游戏内容不因工具代码的许可而获得再授权。
+
+## Usage
 
 For personal use, edit the `config.json` file. The folder pointed by `GenshinData_folder` must include `ExcelBinOutput`, `TextMap`, and `Readable`.
 

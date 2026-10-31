@@ -1,0 +1,31 @@
+# License scope
+
+This derivative contains code from multiple sources. It is not uniformly relicensed as MIT. Copyright and authorship of existing code remain with their respective holders; Git history records contributions.
+
+## Inteyvat-Wiki contributions
+
+Original additions and copyrightable modifications authored by Inteyvat-Wiki, to the extent Inteyvat-Wiki has the right to license them, are offered under the MIT license in LICENSES/MIT-Inteyvat-Wiki.txt:
+
+Copyright (c) 2026 Inteyvat-Wiki
+
+This grant does not replace the license of underlying upstream code, third-party adaptations or game content. For mixed files, the grant applies only to the applicable Inteyvat-Wiki contribution, not all code in that file.
+
+## theBowja / GenshinData-scripts upstream
+
+Original project: https://github.com/theBowja/GenshinData-scripts
+
+The upstream author is theBowja. Its package.json declares ISC, first located in commit 5037aa46db244442aef2bbe34578e51575e04e25 (2022-12-11), and still present in upstream commit 101b65b43a8cd2b82dec943d04ea75df9b815dd4 checked on 2026-10-31.
+
+The declaration is preserved as provenance. No complete upstream license file or original copyright notice has been located. LICENSES/ISC-reference.txt supplies standard ISC permission and disclaimer text for reference; it is explicitly not represented as an original notice obtained from the upstream author or as confirmation of every file's license scope. The missing original notice and scope still require clarification. Do not substitute genshin-db's MIT license or the Inteyvat-Wiki MIT notice for this upstream declaration.
+
+## Razmoth Audio adaptation
+
+The upstream README credits voice/audio.js as a partial JavaScript translation of Razmoth/Audio. The corresponding project is currently available at https://github.com/RazTools/Audio. A pre-port reference revision, 56da8d491fadf713a9c95d5936c764e6f0a52129 (2024-01-22), includes matching package/entry parsing structures and a MIT license with Copyright (c) 2023 Razmoth. That license is preserved verbatim in LICENSES/MIT-Razmoth-Audio.txt.
+
+The exact revision originally consulted by theBowja is not recorded. The verified reference is not claimed to be that exact revision. Preserve the Razmoth MIT notice for the adapted portions, alongside theBowja's upstream provenance and applicable Inteyvat-Wiki modifications.
+
+## External tools, dependencies and game content
+
+LICENSES/MIT-AnimeStudio.txt is a notice copied from the external AnimeStudio installation used by resource tools, not a claim that all third-party DLLs in that installation share one license. No external tool binaries are granted a new license by this file.
+
+Dependencies retain their respective licenses. Game text, images, audio, Lua and other assets, and their presence in generated data or caches, are not independently relicensed under MIT or ISC by this project. See NOTICES.md and docs/license-provenance.md for sources, evidence and outstanding checks.
