@@ -1,6 +1,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { parseIndex, resolve } = require('./miliastra');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const crypto = require('node:crypto');
 function fixture(keys = ['12062732331644947321']) {
     const chunks = [];
     const u32 = value => { const b = Buffer.alloc(4); b.writeUInt32LE(value); chunks.push(b); };
@@ -37,4 +41,48 @@ test('requires exact block/offset before checking Container; rejects ambiguities
     const samePack = { ...unrelated, Offset: 100 };
     assert.throws(() => resolve(hits, [samePack, { ...samePack, PathID: '2' }]), /Ambiguous/);
     assert.throws(() => resolve(hits, [{ ...samePack, Container: '0' }]), /missing image/);
+});
+
+test('prepare uses input-scoped icon inference, preserves exact UInt64 hashes and accepts empty tables', () => {
+    const keys = ['3806693058812336722', '14425841620430768778'];
+    let rows, written;
+    const source = path.resolve('memory-source');
+    const mapBytes = Buffer.from('fixture asset map');
+    const sha256 = crypto.createHash('sha256').update(mapBytes).digest('hex');
+    const map = { map: 'asset-map', sha256, entries: keys.map((key, i) => ({
+        Source: '12342470.blk', Offset: 100, Container: BigInt.asIntN(32, BigInt(key) >> 8n).toString(),
+        Type: 'Sprite', Name: `UI_Exact_${i}`, PathID: String(i),
+    })) };
+    const memoryFs = {
+        readFileSync(file) {
+            if (file === 'asset-map') return mapBytes;
+            if (file === 'image-map') return JSON.stringify(map);
+            if (file === 'index') return fixture(keys);
+            if (file === path.join(source, 'ExcelBinOutput/BeyondCostumeExcelConfigData.json')) return JSON.stringify(rows);
+            if (file.startsWith(source + path.sep)) return '[]';
+            throw new Error(`Unexpected test input: ${file}`);
+        },
+        statSync: () => ({ size: 120 }), mkdirSync: () => {},
+        writeFileSync: (file, value, options) => { assert.equal(options.flag, 'wx'); written = JSON.parse(value); },
+    };
+    const context = { module: { exports: {} }, require(name) {
+        if (name === 'node:fs') return memoryFs;
+        if (name === '../extract/archives/fields') return require('../extract/archives/fields');
+        return require(name);
+    } };
+    vm.runInNewContext(fs.readFileSync(require.resolve('./miliastra'), 'utf8'), context);
+    const prepare = context.module.exports.prepare;
+    for (const field of ['arbitraryResourceA', 'arbitraryResourceB']) {
+        rows = keys.map((hash, i) => ({ costumeId: 260001 + i, [field]: hash }));
+        assert.equal(prepare('index', 'image-map', 'new-cache', source).keys, 2);
+        assert.deepEqual(Object.keys(written.resources).sort(), [...keys].sort());
+        assert.equal(written.resources[keys[1]].image.Name, 'UI_Exact_1');
+    }
+    rows = [{ costumeId: 260001, unknown: keys[0] }];
+    assert.throws(() => prepare('index', 'image-map', 'new-cache', source), /missing witness/);
+    rows = keys.map((hash, i) => ({ costumeId: 260001 + i, first: hash, second: hash }));
+    assert.throws(() => prepare('index', 'image-map', 'new-cache', source), /ambiguous/);
+    rows = [];
+    assert.equal(prepare('index', 'image-map', 'new-cache', source).keys, 0);
+    assert.deepEqual(written.resources, {});
 });

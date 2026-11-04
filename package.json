@@ -2,11 +2,23 @@
   "name": "genshindata-scripts",
   "description": "Node scripts to extract data from ExcelBinOutput",
   "version": "1.0.0",
-  "main": "main.js",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "engines": { "node": ">=22.13" },
+  "files": ["index.js", "index.d.ts", "runtime-config.js", "main.js", "archives.js", "misc.js", "subtitles.js", "cache/", "extract/", "versions/", "resources/*.js", "!resources/*.test.js", "LICENSE", "LICENSES/", "NOTICES.md", "docs/", "README.md"],
   "scripts": {
+    "test:unit": "node scripts/test-unit.cjs",
+    "cache": "node cache/cli.js",
+    "cache:prepare": "node cache/cli.js prepare",
+    "cache:inspect": "node cache/cli.js inspect",
+    "cache:verify": "node cache/cli.js verify",
+    "test:cache": "node --test cache/*.test.js",
     "start": "node main.js",
     "export:misc": "node misc.js",
     "test:misc": "node --test extract/misc/*.test.js",
+    "test:cosmetics": "node --test extract/cosmetics.test.js cache/cosmetics.test.js",
+    "test:maps": "node --test extract/maps/*.test.js resources/maps.test.js resources/map-icons.test.js resources/world-areas.test.js",
     "export:archives": "node archives.js",
     "export:subtitles": "node subtitles.js",
     "test:subtitles": "node extract/subtitles/check_narration.js && node extract/subtitles/check_bubbles.js",
@@ -24,6 +36,7 @@
   "author": "Inteyvat-Wiki",
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
+    "@inteyvat-wiki/resource-tools": "file:../Inteyvat-Wiki-resource-tools",
     "fuzzysort": "^2.0.1"
   },
   "devDependencies": {

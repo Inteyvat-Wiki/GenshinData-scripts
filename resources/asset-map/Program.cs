@@ -1,18 +1,15 @@
-using AnimeStudio;
-using System.Text.Json;
-using System.Security.Cryptography;
+// Compatibility launcher only. Generic map reading lives in resource-tools.
+// Copyright (c) 2026 Inteyvat-Wiki. See resource-tools/NOTICES.md.
+using System.Diagnostics;
 if (args.Length != 3) throw new ArgumentException("Usage: AssetMap STUDIO MAP OUTPUT_JSON");
-var studio = Path.GetFullPath(args[0]); var input = Path.GetFullPath(args[1]);
-System.Runtime.Loader.AssemblyLoadContext.Default.Resolving += (context, name) => {
-    var path = Path.Combine(studio, "bin", name.Name + ".dll");
-    return File.Exists(path) ? context.LoadFromAssemblyPath(path) : null;
-};
-using var stream = File.OpenRead(input);
-var digest = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(); stream.Position = 0;
-var map = MessagePack.MessagePackSerializer.Deserialize<AssetMap>(stream,
-    MessagePack.MessagePackSerializerOptions.Standard.WithCompression(MessagePack.MessagePackCompression.Lz4BlockArray));
-var entries = map.AssetEntries.Where(e => e.Type is ClassIDType.Sprite or ClassIDType.Texture2D)
-    .Select(e => new { e.Name, e.Container, e.Source, e.Offset, PathID = e.PathID.ToString(), Type = e.Type.ToString() }).ToArray();
-using var output = new FileStream(args[2], FileMode.CreateNew);
-JsonSerializer.Serialize(output, new { map = input, sha256 = digest, entries });
-Console.WriteLine($"Exported {entries.Length} image entries (no container truncation filter)");
+// Locate the calling repository from the compiled legacy launcher's directory.
+var root = new DirectoryInfo(AppContext.BaseDirectory);
+while (root != null && !File.Exists(Path.Combine(root.FullName, "package.json"))) root = root.Parent;
+if (root == null) throw new InvalidOperationException("Cannot find package root; use resource-tools read-asset-map directly");
+var start = new ProcessStartInfo("node") { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = root.FullName };
+start.ArgumentList.Add("-e");
+start.ArgumentList.Add("const r=require('@inteyvat-wiki/resource-tools').readAssetMap({studio:process.argv[1],map:process.argv[2],output:process.argv[3]});console.log('Exported '+r.entries.length+' image entries');");
+foreach (var arg in args) start.ArgumentList.Add(Path.GetFullPath(arg));
+using var process = Process.Start(start) ?? throw new InvalidOperationException("Cannot launch Node.js");
+if (!process.WaitForExit(150000)) { process.Kill(true); throw new TimeoutException("Resource map reader timed out"); }
+Environment.ExitCode = process.ExitCode;

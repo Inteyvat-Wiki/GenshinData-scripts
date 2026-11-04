@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
+const { resolveCostumeIconField } = require('../extract/archives/fields');
 const schema = 1;
 const digest = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const tables = ['BeyondCostumeExcelConfigData', 'BeyondCostumeSuitExcelConfigData', 'BeyondCostumeDrawingExcelConfigData'];
@@ -77,7 +78,7 @@ function resolve(hits, entries) {
     }));
 }
 
-function prepare(index, mapFile, output, source, selections = tables.map((table, i) => ({ table, field: i === 0 ? 'MPFOEFGJKAE' : 'iconHash' }))) {
+function prepare(index, mapFile, output, source, selections = tables.map((table, i) => ({ table, field: i === 0 ? resolveCostumeIconField : 'iconHash' }))) {
     const map = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
     assert.equal(digest(map.map), map.sha256, 'Asset map snapshot changed');
     const hashes = new Set();
@@ -85,8 +86,9 @@ function prepare(index, mapFile, output, source, selections = tables.map((table,
         const file = path.join(source, 'ExcelBinOutput', table + '.json');
         const rows = JSON.parse(fs.readFileSync(file, 'utf8'), (key, value, context) =>
             typeof value === 'number' && !Number.isSafeInteger(value) && context?.source ? context.source : value);
+        const key = typeof field === 'function' ? field(rows) : field;
         for (const row of rows) {
-            const value = row[field];
+            const value = row[key];
             assert(typeof value === 'string' || Number.isSafeInteger(value), `Imprecise hash in ${table}`);
             const hash = String(value);
             assert(/^\d+$/.test(hash) && BigInt(hash) <= 0xffffffffffffffffn, `Invalid exact hash in ${table}`);

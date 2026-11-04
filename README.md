@@ -1,6 +1,12 @@
 # GenshinData-scripts
 Node scripts to extract data from ExcelBinOutput, independently maintained by Inteyvat-Wiki.
 
+维护检查：`npm run test:unit` 使用合成夹具，不需要游戏输入；`npm run test:misc` 则针对配置的实际源数据和资源缓存。跨仓库打包、独立安装、缓存准备和查询回归由 wiki-data 的 `npm run check:packages` 负责。资源运行模块按 `resources/*.js` 纳入包和缓存代码指纹，新增模块无需再维护另一份文件列表。包在更名及发布设计完成前保持 `private: true`，不影响本地打包。
+
+混淆字段在本仓库解析：使用 `extract/field-inference.js`，按已核验条目的 ID、文本哈希、资源名或引用值校准当前字段名，不维护版本专属的混淆键别名表。一个样本无法消歧时增加独立样本，取候选字段的交集；校准样本缺失、匹配缺失或不唯一都应报错。字段映射只在当前输入内复用，不能跨源数据缓存。单元测试应覆盖任意键名重命名、行序变化及缺失/歧义情况。原始类型标记和二进制格式标记不等同于属性键，不能仅因形态相似就推断含义。
+
+正文关联也按已知值校准：`Document:100110` 对应 `Localization:200001`（Poem1）；书籍、任务道具、武器及装扮共用这一读取路径。不能逐行选择“看起来像 Localization ID”的第一个数组，因为 Document 还可能含任务专用正文和额外分页引用。简中存在两个相同路径字段时按相同路径读取一次；同一语言出现不同路径则报错，不任选其一。
+
 ## 来源、署名与许可
 
 本项目衍生自 [theBowja/GenshinData-scripts](https://github.com/theBowja/GenshinData-scripts)。原作者为 theBowja，后续修改由 Inteyvat-Wiki 组织维护；提交历史保留各贡献者署名。本分支并非上游官方发布，不保证与上游的接口、数据格式及运行方式兼容。
@@ -8,6 +14,8 @@ Node scripts to extract data from ExcelBinOutput, independently maintained by In
 本分支的许可范围见 [LICENSE](LICENSE)：Inteyvat-Wiki 有权授权的自行创作贡献采用 MIT，上游代码保留 ISC 声明，语音提取器涉及的 Razmoth MIT 许可单独保留。上游 ISC 原始文件和版权声明仍未找到，所附标准文本只是明确标注的参考副本，不代表核验全部完成。详细溯源见 [许可来源记录](docs/license-provenance.md) 和 [NOTICES.md](NOTICES.md)。游戏内容不因工具代码的许可而获得再授权。
 
 ## Usage
+
+新的 npm 数据提供入口与缓存规则见 [快照接口](docs/cache-provider.md)。导入包不会自动提取；请显式调用 `prepare()`。以下是暂时保留的旧命令用法。
 
 For personal use, edit the `config.json` file. The folder pointed by `GenshinData_folder` must include `ExcelBinOutput`, `TextMap`, and `Readable`.
 
