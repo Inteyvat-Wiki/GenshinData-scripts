@@ -1,8 +1,10 @@
 const fs = require('fs');
+const { resolveField, resolveRow } = require('./field-inference');
+const { resolveMaterialSourceFields } = require('./misc/schema');
 const textMapTracking = require('../versions/tracking');
 const { VERSION_LANGUAGES } = require('../versions/textmap');
 
-global.config = require('../config.json');
+global.config = require('../runtime-config');
 
 global.getExcel = function(file) { return require(`${config.GenshinData_folder}/ExcelBinOutput/${file}.json`); }
 global.getBin = function(path) { return require(`${config.GenshinData_folder}/BinOutput/${path}.json`); }
@@ -81,9 +83,9 @@ global.removeSprite = function(str) { return str.replace(/{SPRITE_PRESET.*?}/gi,
 global.removeTimezone = function(str) { return str.replace("{TIMEZONE}", ""); }
 global.sanitizeDescription = function(str, removeBold) { return removeTimezone(removeSprite(replaceNewline(replaceLayout(stripHTML(convertLinkToBold(convertBold(str || '', removeBold), removeBold)))))); }
 global.getPropNameWithMatch = function(excel, idkey, idval, propval) {
-	const tmp = excel.find(e => e[idkey] === idval);
-	if (!tmp) throw new Error(`getPropNameWithMatch: Did not find value for key`);
-	return Object.entries(tmp).find(e => e[1] === propval || e[1][0] === propval)[0];
+	const label = `${idkey}=${idval}/${propval}`;
+	const row = resolveRow(excel, label, row => row[idkey] === idval);
+	return resolveField(label, [{ row, match: value => value === propval || (Array.isArray(value) && value[0] === propval) }]);
 };
 global.validName = function(name) { return name !== '' && !name.includes('</') && !/[|{}#]/.test(name)}
 global.sanitizeName = function(str, id) { 
@@ -133,10 +135,15 @@ global.validateString = function(str, folder, lang, throwerror = true) {
     return true;
 }
 
+const materialSourceFields = new WeakMap();
 global.getMatSourceText = function(id, textmap) {
-	let tmp = getExcel('MaterialSourceDataExcelConfigData').find(e => e.id === id);
-	tmp = tmp.textList.concat(tmp.jumpDescs);
-	return tmp.map(e => textmap[e]).filter(e => e !== '' && e !== undefined);
+	const rows = getExcel('MaterialSourceDataExcelConfigData');
+	const row = rows.find(e => e.id === id);
+	if (!row) return [];
+	if (!materialSourceFields.has(rows)) materialSourceFields.set(rows, resolveMaterialSourceFields(rows));
+	const fields = materialSourceFields.get(rows);
+	return [...(row.textList || []), ...(row[fields.jumpDescs] || [])]
+		.map(hash => textmap[hash]).filter(text => text !== '' && text !== undefined);
 }
 
 global.localeMap = {
@@ -369,12 +376,16 @@ function exportData(folder, collateFunc, englishonly, skipwrite, languages = lan
 	const stats = {};
 	const image = {};
 	const versions = {};
+	const textDependencies = {};
 
 	languages.forEach(lang => {
 		if (global.versionExport && lang !== global.versionExport.language) return;
 		if(englishonly && lang !== 'EN') return;
 		let data = textMapTracking.collate(collateFunc, lang);
-		if (!skipwrite && VERSION_LANGUAGES.includes(lang)) textMapTracking.accumulateVersions(versions, data, config);
+		if (!skipwrite && VERSION_LANGUAGES.includes(lang)) {
+			textMapTracking.accumulateDependencies(textDependencies, data);
+			if (config.version_tracking !== false) textMapTracking.accumulateVersions(versions, data, config);
+		}
 		if (global.versionExport) return;
 		fs.mkdirSync(`${config.genshin_export_folder}/${lang}`, { recursive: true });
 		fs.mkdirSync(`${config.genshin_output_folder}/${lang_map[lang]}`, { recursive: true });
@@ -408,6 +419,8 @@ function exportData(folder, collateFunc, englishonly, skipwrite, languages = lan
 		}
 	});
 	if (!skipwrite) textMapTracking.writeVersions(folder, versions, config,
+		collateFunc.mergeVersions === true || global.versionExport?.merge === true);
+	if (!skipwrite) textMapTracking.writeDependencies(folder, textDependencies, config,
 		collateFunc.mergeVersions === true || global.versionExport?.merge === true);
 
 	if (Object.keys(stats).length > 0) {

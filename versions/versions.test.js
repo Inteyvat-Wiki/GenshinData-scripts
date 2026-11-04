@@ -8,6 +8,35 @@ const { DatabaseSync } = require('node:sqlite');
 const textmap = require('./textmap');
 const tracking = require('./tracking');
 
+test('explicit ordered refs stitch detached release histories and safely seed SQLite from a verified prefix', async t => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'genshin-version-seed-test-'));
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    const git = (...args) => execFileSync('git', ['-c', `safe.directory=${directory.replaceAll('\\', '/')}`, '-c', 'core.autocrlf=false', '-c', 'commit.gpgsign=false', '-C', directory, ...args], { encoding: 'utf8' }).trim();
+    git('init', '-q'); fs.mkdirSync(path.join(directory, 'TextMap'));
+    const commit = (version, data) => {
+        fs.writeFileSync(path.join(directory, 'TextMap/TextMapEN.json'), JSON.stringify(data, null, 2) + '\n');
+        git('add', 'TextMap'); git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', version);
+        return git('rev-parse', 'HEAD');
+    };
+    const old = commit('1.4.0', { 11: 'One' });
+    const seed = path.join(directory, 'seed');
+    await textmap.build({ GenshinData_folder: directory, textmap_history_ref: [old], textmap_version_cache: seed }, () => {});
+    git('checkout', '--orphan', 'latest');
+    const current = commit('6.7.0', { 11: 'One', 12: 'One' });
+    const logs = [], target = path.join(directory, 'target');
+    const config = { GenshinData_folder: directory, textmap_history_ref: [old, current], textmap_version_cache: target, textmap_version_seed: seed };
+    const index = await textmap.build(config, message => logs.push(message));
+    assert.equal(JSON.parse(fs.readFileSync(index))[11], '6.7');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(seed, 'hashes.json')))[11], '1.x');
+    assert(logs.some(message => message.includes('reused validated history state (1 snapshots)')));
+    const manifest = JSON.parse(fs.readFileSync(path.join(target, 'manifest.json')));
+    assert.equal(manifest.snapshots, 2);
+    assert.equal(manifest.firstVersion, '1.x');
+    assert.equal(textmap.history(directory, {}, () => {}, [old, current, current]).length, 2);
+    await assert.rejects(textmap.build({ ...config, textmap_version_cache: path.join(directory, 'invalid-seed'),
+        textmap_version_overrides: { [old]: '1.5' } }, () => {}), /History seed does not match/);
+});
+
 test('release normalization, numeric ordering, legacy names and overlays', () => {
     assert.equal(textmap.versionOf('1.3.2 -> 1.4.0'), '1.4');
     assert.equal(textmap.normalizeVersion('1.3'), '1.x');

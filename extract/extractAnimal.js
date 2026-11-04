@@ -1,17 +1,15 @@
 require('./global.js');
+const { resolveField, resolveRow } = require('./field-inference');
 
 const xmat = getExcel('MaterialExcelConfigData');
 const xcodex = getExcel('AnimalCodexExcelConfigData');
 const xdescribe = getExcel('AnimalDescribeExcelConfigData');
 const xcapture = getExcel('CaptureExcelConfigData');
 
-// FIX THIS EVERY VERSION
-let propCOUNTTYPE = "FEBIEOGMDMF"; // AnimalCodexExcelConfigData
-
-// find property names
-for([key, value] of Object.entries(xcodex[0])) {
-	if(value === "CODEX_COUNT_TYPE_KILL") propCOUNTTYPE = key;
-}
+const propCOUNTTYPE = resolveField('AnimalCodex.countType', [{
+	row: resolveRow(xcodex, 'AnimalCodex:20011201', row => row.id === 20011201),
+	value: 'CODEX_COUNT_TYPE_KILL',
+}]);
 
 function collateAnimal(lang) {
 	const language = getLanguage(lang);

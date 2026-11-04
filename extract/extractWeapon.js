@@ -1,9 +1,9 @@
 require('./global.js');
+const { getReadableData } = require('./document');
 
 const xweapon = getExcel('WeaponExcelConfigData');
 const xrefine = getExcel('EquipAffixExcelConfigData');
 const documentById = new Map(getExcel('DocumentExcelConfigData').map(obj => [obj.id, obj]));
-const localizationById = new Map(getExcel('LocalizationExcelConfigData').map(obj => [obj.id, obj]));
 
 const moraNameTextMapHash = getExcel('MaterialExcelConfigData').find(ele => ele.id === 202).nameTextMapHash;
 const xmat = getExcel('MaterialExcelConfigData');
@@ -164,19 +164,13 @@ function collateWeapon(lang) {
 
 function getWeaponStory(weapon, lang) {
 	const document = documentById.get(weapon.storyId);
-	if (!document || !document.questIDList?.length) {
+	const readable = getReadableData(document, lang);
+	if (!readable.localizationIds.length) {
 		const story = getReadable(`Weapon${weapon.id}${lang != 'CHS' ? '_' + lang : ''}`, lang);
 		return story ? [story] : [];
 	}
 
-	return document.questIDList.map(id => localizationById.get(id))
-		.filter(Boolean)
-		.map(localization => lang === 'CHS'
-			? Object.values(localization).find(value => typeof value === 'string' && value.includes('/CHS/'))
-			: localization[lang === 'CHT' ? 'tcPath' : `${lang.toLowerCase()}Path`])
-		.filter(Boolean)
-		.map(path => getReadable(path.split(/[\\/]/).pop().replace(/\.txt$/, ''), lang))
-		.filter(text => text !== '');
+	return readable.content;
 }
 
 let promoteLevel = undefined;

@@ -1,5 +1,7 @@
 require('./global.js');
+const { resolveMaterialSourceFields } = require('./misc/schema');
 const xsource = getExcel('MaterialSourceDataExcelConfigData');
+const sourceFields = resolveMaterialSourceFields(xsource);
 
 /*
 MATERIAL_AVATAR_MATERIAL is talent level-up material, etc.
@@ -116,7 +118,7 @@ function collateMaterial(lang) {
 			// 	return poolAccum;
 			// }, []);
 		// }
-		const sourcelist = tmp.textList.concat(tmp.jumpList).concat(tmp[getPropJumpDescs()]);
+		const sourcelist = tmp.textList.concat(tmp.jumpList).concat(tmp[sourceFields.jumpDescs] || []);
 		// if (obj.id === 112075) console.log(tmp)
 		data.sources = sourcelist.map(ele => language[ele]).filter(ele => ele !== '' && ele !== undefined); // TextList/JumpList
 
@@ -146,17 +148,6 @@ function getDayWeekList(dungeonId, langmap) {
 			if(ele[key].includes(dungeonId)) mylist.push(value);
 	mylist = mylist.sort((a, b) => a - b);
 	return mylist.map(ele => langmap[dayOfWeek(ele)]);
-}
-
-let propJumpDescs = undefined;
-function getPropJumpDescs() {
-	if(propJumpDescs !== undefined) return propJumpDescs;
-	for (let [key, value] of Object.entries(xsource[0])) {
-		if (Array.isArray(value) && value[0] === 2918309764) {
-			propJumpDescs = key;
-			return propJumpDescs;
-		}
-	}
 }
 
 module.exports = collateMaterial;

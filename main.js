@@ -51,6 +51,7 @@ function exportGenshinData() {
 
 	exportData('outfits', require('./extract/extractOutfit'));
 	exportData('windgliders', require('./extract/extractWindGlider'));
+	exportData('weaponskins', require('./extract/extractWeaponSkin'));
 	exportData('animals', require('./extract/extractAnimal'));
 	exportData('namecards', require('./extract/extractNamecard'));
 	exportData('geographies', require('./extract/extractGeography'));

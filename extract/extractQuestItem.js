@@ -1,35 +1,18 @@
 require('./global.js');
+const { getReadableData: readDocument } = require('./document');
+const { resolveMaterialSourceFields } = require('./misc/schema');
 
 const xmaterial = getExcel('MaterialExcelConfigData');
 const xsource = getExcel('MaterialSourceDataExcelConfigData');
+const sourceFields = resolveMaterialSourceFields(xsource);
 const xarchive = getExcel('MaterialCodexExcelConfigData');
 const xdocument = getExcel('DocumentExcelConfigData');
-const xlocalization = getExcel('LocalizationExcelConfigData');
 const xgadgetinteract = getExcel('GadgetInteractExcelConfigData');
 
 const sourceById = new Map(xsource.map(obj => [obj.id, obj]));
 const archiveByMaterialId = new Map(xarchive.map(obj => [obj.materialId, obj]));
 const documentById = new Map(xdocument.map(obj => [obj.id, obj]));
-const localizationById = new Map(xlocalization.map(obj => [obj.id, obj]));
 const gadgetInteractionsByItemId = new Map();
-
-const readablePathProperties = {
-	CHS: ['DEFNEHAFMMA', 'JDNBKKPEFAI'],
-	CHT: ['tcPath'],
-	DE: ['dePath'],
-	EN: ['enPath'],
-	ES: ['esPath'],
-	FR: ['frPath'],
-	ID: ['idPath'],
-	IT: ['itPath'],
-	JP: ['jpPath'],
-	KR: ['krPath'],
-	PT: ['ptPath'],
-	RU: ['ruPath'],
-	TH: ['thPath'],
-	TR: ['trPath'],
-	VI: ['viPath']
-};
 
 xgadgetinteract.forEach(interaction => {
 	(interaction.costItems || []).forEach(costItem => {
@@ -43,32 +26,13 @@ function getText(language, textMapHash) {
 	return textMapHash === undefined || textMapHash === null ? '' : language[textMapHash] || '';
 }
 
-function getReadablePath(localization, lang) {
-	const properties = readablePathProperties[lang] || [];
-	for (const property of properties) {
-		if (localization[property]) return localization[property];
-	}
-	return '';
-}
-
-function getReadableName(path) {
-	return path.substring(path.lastIndexOf('/') + 1).replaceAll('\\', '/');
-}
-
 function getFilename(material, accum) {
 	const filename = makeUniqueFileName(material.nameTextMapHash, accum);
 	return filename || `quest_item_${material.id}`;
 }
 
 function getReadableData(document, lang, language) {
-	const localizationIds = document ? document.questIDList || [] : [];
-	const readablePaths = localizationIds.map(id => localizationById.get(id))
-		.filter(localization => localization !== undefined)
-		.map(localization => getReadablePath(localization, lang))
-		.filter(path => path !== '');
-	const content = readablePaths
-		.map(path => getReadable(getReadableName(path), lang))
-		.filter(text => text !== '');
+	const { localizationIds, readablePaths, content } = readDocument(document, lang);
 
 	return {
 		documentId: document && document.id,
@@ -84,7 +48,7 @@ function getReadableData(document, lang, language) {
 function getSourceTexts(source, language) {
 	if (!source) return [];
 
-	const hashes = ['textList', 'jumpList', 'jumpDescs'].flatMap(property => {
+	const hashes = ['textList', 'jumpList', sourceFields.jumpDescs].flatMap(property => {
 		return Array.isArray(source[property]) ? source[property] : [];
 	});
 	return hashes.map(hash => getText(language, hash)).filter(text => text !== '');

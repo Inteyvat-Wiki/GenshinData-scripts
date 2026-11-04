@@ -2,17 +2,36 @@
 const assert = require('node:assert/strict');
 const { get_serenitea_export } = require('./serenitea');
 const { source_excel, source_text, source_bin } = require('./archiveSource');
+const { resolveSereniteaLayoutField } = require('./fields');
+const { getTalkKeys } = require('../dialogue');
+const dialogue_fields = getTalkKeys();
 // Source extraction has no local image-copy side effects.
 const furniture_rows = source_excel('HomeWorldFurnitureExcelConfigData');
 const furniture_types = new Map(source_excel('HomeWorldFurnitureTypeExcelConfigData').map(row => [row.typeID, row]));
 const suite_rows = source_excel('FurnitureSuiteExcelConfigData');
+const layout_field = suite_rows.length ? resolveSereniteaLayoutField(source_bin) : undefined;
 const companion_rows = source_excel('HomeWorldNPCExcelConfigData');
 const events = source_excel('HomeWorldEventExcelConfigData');
+const realm_rows = source_excel('HomeworldModuleExcelConfigData');
 const direct_ids = new Set([
     ...companion_rows.flatMap(row => row.talkIDs || []),
     ...events.flatMap(row => row.talkID ? [row.talkID] : []),
 ]);
-assert.equal(direct_ids.size, 594);
+const direct_dialog_counts = new Map([...direct_ids].map(id => {
+    let body;
+    for (const folder of ['Npc', 'Quest', 'Activity', 'Gadget', 'NpcOther', 'Coop', 'Blossom', 'Cutscene', 'Storyboard']) {
+        body = source_bin(`Talk/${folder}/${id}.json`);
+        if (body) break;
+    }
+    if (!body) return [id, null]; // Unreleased source references must remain diagnosed, never invented.
+    assert(Array.isArray(body[dialogue_fields.dialogList]), `Missing direct HomeWorld dialog list: ${id}`);
+    return [id, body[dialogue_fields.dialogList].length];
+}));
+const expected_ids = [
+    ...furniture_rows.map(row => `furniture-${row.id}`), ...realm_rows.map(row => `realm-${row.id}`),
+    ...companion_rows.map(row => `companion-${row.npcID}`), ...suite_rows.map(row => `suite-${row.suiteID}`),
+    'host-1001', 'host-2000',
+];
 function graph(item) {
     for (const key of item.entry_talks)
         (0, assert)(item.talks[key], `Missing entry ${key}`);
@@ -79,8 +98,9 @@ for (const lang of ['zh_hans', 'en']) {
                 (0, assert)(entry.rotation.length === 3 && entry.rotation.every(Number.isFinite));
         }
     }
-    assert.deepEqual(counts, { furniture: 2513, realm: 8, companion: 121, suite: 111, host: 2 });
-    assert.equal(result.files.length, 2755);
+    assert.deepEqual(counts, { furniture: furniture_rows.length, realm: realm_rows.length,
+        companion: companion_rows.length, suite: suite_rows.length, host: 2 });
+    assert.deepEqual([...files.keys()].sort(), [...expected_ids].sort(), 'exact source-qualified catalogue membership');
     for (const row of furniture_rows) {
         const item = files.get(`furniture-${row.id}`);
         assert.equal(item.name, source_text(lang, row.nameTextMapHash));
@@ -99,29 +119,38 @@ for (const lang of ['zh_hans', 'en']) {
         const item = files.get(`suite-${row.suiteID}`);
         assert.equal(item.description, source_text(lang, row.suiteDescTextMapHash));
         const raw = source_bin(`HomeworldFurnitureSuit/${row.jsonName}.json`);
-        assert.equal(item.layout?.length, raw.HHDPMDCFCPK.length);
-        raw.HHDPMDCFCPK.forEach((entry, index) => {
+        assert.equal(item.layout?.length, raw[layout_field].length);
+        raw[layout_field].forEach((entry, index) => {
             const position = entry.position || {};
             assert.deepEqual(item.layout[index].position, [position.x || 0, position.y || 0, position.z || 0]);
             if (entry.rotation)
                 assert.deepEqual(item.layout[index].rotation, [entry.rotation.x || 0, entry.rotation.y || 0, entry.rotation.z || 0]);
         });
         const components = new Map();
-        for (const entry of raw.HHDPMDCFCPK)
+        for (const entry of raw[layout_field])
             components.set(entry.furnitureID, (components.get(entry.furnitureID) || 0) + 1);
         for (const [id, count] of components)
             (0, assert)(item.relations.some(relation => relation.role === 'component'
                 && relation.id === `furniture-${id}` && relation.count === count));
         for (const event of events.filter(event => event.furnitureSuitID === row.suiteID)) {
-            if (event.talkID)
+            if (event.talkID && direct_dialog_counts.get(event.talkID) !== null)
                 (0, assert)(Object.values(item.talks).some(talk => talk.source_id === event.talkID));
+            else if (event.talkID)
+                assert(item.diagnostics?.includes(`missing_talk:${event.talkID}`));
             else
                 (0, assert)(item.diagnostics?.some(message => message.endsWith(`:${event.eventID}`)));
         }
     }
-    for (const id of direct_ids)
-        (0, assert)(talk_ids.has(id), `Missing direct HomeWorld talk ${id}`);
-    assert.equal([...direct_ids].reduce((count, id) => count + (talk_dialog_counts.get(id) || 0), 0), 7388);
+    for (const id of direct_ids) {
+        if (direct_dialog_counts.get(id) === null) {
+            assert(!talk_ids.has(id), `Invented HomeWorld dialogue without a source body: ${id}`);
+            const owners = companion_rows.filter(row => row.talkIDs?.includes(id)).map(row => `companion-${row.npcID}`);
+            for (const owner of owners) assert(files.get(owner).diagnostics?.includes(`missing_talk:${id}`), `${owner}:${id} source absence diagnosed`);
+        } else {
+            (0, assert)(talk_ids.has(id), `Missing direct HomeWorld talk ${id}`);
+            assert.equal(talk_dialog_counts.get(id), direct_dialog_counts.get(id), `Complete direct HomeWorld dialogue: ${id}`);
+        }
+    }
     try {
         assert.equal(files.get('host-1001').name, lang === 'zh_hans' ? '阿圆' : 'Tubby');
         assert.equal(files.get('host-2000').name, lang === 'zh_hans' ? '阿嘟' : 'Chubby');
@@ -129,12 +158,12 @@ for (const lang of ['zh_hans', 'en']) {
         (0, assert)(Object.values(files.get('host-2000').talks).some(talk => talk.source_id === 6890501));
         for (const [host, entry, name_hash] of [[1001, 6890101, 1329823275], [2000, 6890501, 3190395835]]) {
             const item = files.get(`host-${host}`);
-            const anchor = source_bin(`Talk/Gadget/${entry}.json`).PCIAMAFDDAA[0];
-            assert.deepEqual(anchor.KBPOBGFGLKN, { id: String(host), type: 'TALK_ROLE_GADGET' });
-            assert.equal(anchor.DPHNNJJCFAN, name_hash);
+            const anchor = source_bin(`Talk/Gadget/${entry}.json`)[dialogue_fields.dialogList][0];
+            assert.deepEqual(anchor[dialogue_fields.speaker], { id: String(host), type: 'TALK_ROLE_GADGET' });
+            assert.equal(anchor[dialogue_fields.speakerTitle], name_hash);
             assert.equal(item.name, source_text(lang, name_hash));
             for (const talk of Object.values(item.talks)) {
-                const raw = source_bin(`Talk/Gadget/${talk.source_id}.json`).PCIAMAFDDAA;
+                const raw = source_bin(`Talk/Gadget/${talk.source_id}.json`)[dialogue_fields.dialogList];
                 assert.equal(Object.keys(talk.dialogs).length, raw.length, `Filtered host reply: ${talk.source_id}`);
                 (0, assert)(Object.keys(talk.dialogs).length > 0);
             }
@@ -155,7 +184,8 @@ for (const lang of ['zh_hans', 'en']) {
         (0, assert)(Object.values(kazuha.talks).some(talk => talk.source_id === id));
     }
     (0, assert)(kazuha.name && Object.values(kazuha.talks).some(talk => Object.values(talk.dialogs).some(dialog => dialog.content)));
-    console.log(JSON.stringify({ lang, counts, direct_talks: direct_ids.size, unique_talks: talk_ids.size,
+    console.log(JSON.stringify({ lang, counts, direct_talks: direct_ids.size,
+        unavailable_direct_talks: [...direct_dialog_counts].filter(([, count]) => count === null).map(([id]) => id), unique_talks: talk_ids.size,
         direct_dialogs: [...direct_ids].reduce((count, id) => count + (talk_dialog_counts.get(id) || 0), 0),
         unique_talk_dialogs: [...talk_dialog_counts.values()].reduce((count, size) => count + size, 0),
         dialogs_including_suite_references: dialogs, layout_instances: positions,

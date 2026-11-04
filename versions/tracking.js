@@ -4,7 +4,7 @@ const { cachePaths, compareVersions } = require('./textmap');
 
 const frames = [];
 const dependencies = new WeakMap();
-let versions, versionsFile;
+let versions, versionsFile, versionsStamp;
 let reducerDepth = 0;
 
 function validHash(hash) {
@@ -115,9 +115,12 @@ function objectVersion(value, index) {
 
 function loadVersions(config) {
     const file = cachePaths(config).index;
-    if (!versions || versionsFile !== file) {
+    const stat = fs.statSync(file, { bigint: true });
+    const stamp = config.textmap_version_index_id || `${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+    if (!versions || versionsFile !== file || versionsStamp !== stamp) {
         versions = JSON.parse(fs.readFileSync(file, 'utf8'));
         versionsFile = file;
+        versionsStamp = stamp;
     }
     return versions;
 }
@@ -148,4 +151,23 @@ function writeVersions(folder, values, config, merge = false) {
     }
 }
 
-module.exports = { attach, observe, languageProxy, record, collectHashes, collate, objectVersion, loadVersions, accumulateVersions, writeVersions };
+function accumulateDependencies(target, data) {
+    for (const [key, value] of Object.entries(data)) {
+        target[key] = [...new Set([...(target[key] || []), ...collectHashes(value)])].sort();
+    }
+}
+
+function writeDependencies(folder, values, config, merge = false) {
+    for (const root of new Set([config.genshin_output_folder, config.genshin_export_folder])) {
+        const directory = path.join(root, 'dependencies');
+        fs.mkdirSync(directory, { recursive: true });
+        const file = path.join(directory, `${folder}.json`);
+        if (merge && fs.existsSync(file)) {
+            const prior = JSON.parse(fs.readFileSync(file, 'utf8'));
+            for (const [key, hashes] of Object.entries(prior)) values[key] = [...new Set([...(values[key] || []), ...hashes])].sort();
+        }
+        fs.writeFileSync(file, JSON.stringify(values, null, '\t'));
+    }
+}
+
+module.exports = { attach, observe, languageProxy, record, collectHashes, collate, objectVersion, loadVersions, accumulateVersions, writeVersions, accumulateDependencies, writeDependencies };

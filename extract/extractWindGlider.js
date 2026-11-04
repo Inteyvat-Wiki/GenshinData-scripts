@@ -1,8 +1,9 @@
 require('./global.js');
+const { createStoryReader } = require('./cosmetics');
 
 const xmat = getExcel('MaterialExcelConfigData');
-const xsource = getExcel('MaterialSourceDataExcelConfigData');
 const xfly = getExcel('AvatarFlycloakExcelConfigData');
+const story = createStoryReader(getExcel('DocumentExcelConfigData'), getExcel('LocalizationExcelConfigData'), getReadable);
 
 function collateWindGlider(lang) {
 	const language = getLanguage(lang);
@@ -12,9 +13,10 @@ function collateWindGlider(lang) {
 		data.id = obj[getPropMaterialId()];
 
 		data.name = language[obj.nameTextMapHash];
-		data.description = sanitizeDescription(language[obj.descTextMapHash]);
+		data.descriptionRaw = replaceNewline(language[obj.descTextMapHash] || '');
+		data.description = sanitizeDescription(data.descriptionRaw);
 
-		data.story = getReadable(`Wings${obj[getPropMaterialId()]}${(lang != 'CHS') ? ('_' + lang) : ''}`, lang);
+		data.story = story(data.id, lang);
 
 		let flymat = xmat.find(ele => ele.id === obj[getPropMaterialId()]) || {};
 
@@ -30,9 +32,7 @@ function collateWindGlider(lang) {
 		data.filename_gacha = obj.icon;
 
 
-		let filename = makeFileName(getLanguage('EN')[obj.nameTextMapHash]);
-		if(filename === '') return accum;
-		if(accum[filename] !== undefined) console.log('filename collision: ' + filename);
+		let filename = makeUniqueFileName(obj.nameTextMapHash, accum) || String(data.id);
 		checkDupeName(data, dupeCheck);
 		accum[filename] = data;
 		return accum;

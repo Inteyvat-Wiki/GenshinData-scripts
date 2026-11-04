@@ -3,6 +3,7 @@ const { source_excel, source_text, archive_image, source_bin, archive_dialogue, 
 const excel = (name) => source_excel(`${name}ExcelConfigData`);
 const by_id = (rows) => new Map(rows.map(row => [row.id, row]));
 const { work_time_text } = require('./tcg_work_time');
+const { resolveTcgPortraitField } = require('./fields');
 const supported = ['zh_hans', 'en'];
 const battle_fields = ['happyTalkId', 'sadTalkId', 'toughTalkId', 'elementBrustTalkId',
     'lowHealthTalkId', 'highHealthTalkId'];
@@ -139,7 +140,9 @@ function get_tcg_export(lang) {
     const bosses = excel('GCGBossLevel'), quests = excel('GCGQuestLevel'), others = excel('GcgOtherLevel');
     const stages = excel('GCGGameReward'), games = by_id(excel('GCGGame')), decks = by_id(excel('GCGDeck'));
     const battle_rows = excel('GCGTalk'), details = new Map(excel('GCGTalkDetail').map(row => [row.talkDetailId, row]));
-    const icons = by_id(excel('GCGTalkDetailIcon'));
+    const icon_rows = excel('GCGTalkDetailIcon');
+    const portrait_field = resolveTcgPortraitField(icon_rows);
+    const icons = by_id(icon_rows);
     const work_times = by_id(source_excel('GcgWorldWorkTimeExcelConfigData'));
     const talk_rows = [0, 1].flatMap(part => source_excel(`TalkExcelConfigData_${part}`));
     const talk_index = by_id(talk_rows);
@@ -308,7 +311,7 @@ function get_tcg_export(lang) {
         const portrait = icons.get(row.oppoAvatarPicId);
         // The source supplies both regular and circular portraits explicitly.
         // Never derive the circular resource by appending a filename suffix.
-        image(item, id, portrait?.FLNKMCFIMKJ || portrait?.iconName || avatars.get(row.oppoAvatarPicId)?.iconName, 'opponent');
+        image(item, id, portrait?.[portrait_field] || portrait?.iconName || avatars.get(row.oppoAvatarPicId)?.iconName, 'opponent');
         hashes(item, [games.get(row.levelId)?.oppoPlayerNameTextMapHash]);
         external(item, 'character', row.oppoAvatarPicId, 'opponent');
         for (const npc_id of stage_players.get(row.levelId) || []) {

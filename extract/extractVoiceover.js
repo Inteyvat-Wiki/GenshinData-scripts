@@ -109,8 +109,10 @@ function mapAvatarNameToAvatarId(avatarName) {
 	if (switchMap[avatarName]) return switchMap[avatarName];
 	
 	if (!mycharacter) mycharacter = require(`${config.genshin_export_folder}/EN/characters.json`);
-	if (!iconMap) iconMap = Object.values(mycharacter).reduce((accum, curr) => {
-		const iconname = curr.filename_icon.substring(curr.filename_icon.lastIndexOf('_')+1).toLowerCase();
+	// Character exports move filename_* into the shared image table. Resolve
+	// voice switches from the source avatar icon instead of that stripped field.
+	if (!iconMap) iconMap = xplayableAvatar.reduce((accum, curr) => {
+		const iconname = curr.iconName.substring(curr.iconName.lastIndexOf('_')+1).toLowerCase();
 		accum[iconname] = curr.id;
 		return accum;
 	}, {});

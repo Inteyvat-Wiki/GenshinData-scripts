@@ -3,11 +3,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { get_tcg_export } = require('./tcg');
+const { resolveTcgPortraitField } = require('./fields');
 const { source_excel, source_text } = require('./archiveSource');
 const { source_bin } = require('./archiveSource');
 const excel = (name) => source_excel(`${name}ExcelConfigData`);
+const portrait_field = resolveTcgPortraitField(excel('GCGTalkDetailIcon'));
 const results = new Map();
-const counts = { card: 629, card_back: 40, card_table: 7, stage: 1411 };
+const source_types = { card: ['GCGDeckCard', 'id'], card_back: ['GCGDeckBack', 'itemId'],
+    card_table: ['GCGDeckField', 'itemId'], stage: ['GCGGameReward', 'levelId'] };
 const narrative_ids = new Set(excel('GCGGameReward').map(row => row.levelId));
 const details = new Map(excel('GCGTalkDetail').map(row => [row.talkDetailId, row]));
 const languages = ['zh_hans', 'en'];
@@ -24,11 +27,17 @@ if (fs.existsSync(npcDirectory))
         for (const talk of npc.talks)
             existing_npc_talks.add(talk.id);
     }
+function raw_body(id) {
+    for (const folder of ['Npc', 'Quest', 'Activity', 'Gadget', 'NpcOther', 'Coop', 'Blossom', 'Cutscene', 'Storyboard']) {
+        const body = source_bin(`Talk/${folder}/${id}.json`);
+        if (body) return body;
+    }
+    return null;
+}
 function raw_dialogs(talk_ids) {
     const result = new Set();
     for (const id of talk_ids) {
-        const body = source_bin(`Talk/Npc/${id}.json`) || source_bin(`Talk/Quest/${id}.json`)
-            || source_bin(`Talk/Activity/${id}.json`);
+        const body = raw_body(id);
         for (const dialog of body?.[dialogue_fields.dialogList] || []) {
             // Count source Dialog IDs, never local renumbered keys or repeated page copies.
             const speaker = dialog[dialogue_fields.speaker] || {};
@@ -46,8 +55,9 @@ function raw_dialogs(talk_ids) {
         const files = new Map(result.files.map(file => [file.id, file.data]));
         assert.equal(files.size, result.files.length);
         assert.deepEqual(result.list.map(page => page.id), result.files.map(file => file.id));
-        for (const [type, count] of Object.entries(counts)) {
-            assert.equal(result.files.filter(file => file.data.type === type).length, count, `${lang}:${type}`);
+        for (const [type, [table, key]] of Object.entries(source_types)) {
+            assert.deepEqual(result.files.filter(file => file.data.type === type).map(file => file.id).sort(),
+                excel(table).map(row => `${type}-${row[key]}`).sort(), `${lang}:${type} source membership`);
         }
         for (const row of excel('GCGDeckCard')) {
             const item = files.get(`card-${row.id}`);
@@ -81,13 +91,18 @@ function raw_dialogs(talk_ids) {
         for (const row of excel('GCGCharacterLevel')) {
             const item = files.get(`player-${row.npcId}`);
             for (const field of ['normalWinTalk', 'normalLossTalk', 'hardWinTalk', 'hardLossTalk']) {
-                (0, assert)(Object.values(item.talks).some(talk => talk.source_id === row[field]), `${lang}:${row.npcId}:${field}`);
+                if (raw_body(row[field]))
+                    (0, assert)(Object.values(item.talks).some(talk => talk.source_id === row[field]), `${lang}:${row.npcId}:${field}`);
+                else {
+                    assert(!Object.values(item.talks).some(talk => talk.source_id === row[field]), 'no invented dialogue for an unavailable source');
+                    assert(item.diagnostics?.includes(`missing_talk:${row[field]}`), `${lang}:${row.npcId}:${field}: source absence diagnosed`);
+                }
             }
         }
         for (const row of excel('GCGGameReward')) {
             const stage = files.get(`stage-${row.levelId}`);
             const portrait = excel('GCGTalkDetailIcon').find(icon => icon.id === row.oppoAvatarPicId);
-            if (portrait?.FLNKMCFIMKJ) assert(stage.images.some(image => image.kind === 'opponent' && image.name === portrait.FLNKMCFIMKJ));
+            if (portrait?.[portrait_field]) assert(stage.images.some(image => image.kind === 'opponent' && image.name === portrait[portrait_field]));
             assert.equal(stage.name, source_text(lang, row.levelNameTextMapHash));
             assert.equal(stage.description, source_text(lang, row.levelDecTextMapHash));
             (0, assert)(!('ruleDec' in stage));
@@ -161,7 +176,8 @@ function raw_dialogs(talk_ids) {
         assert.deepEqual([...emitted_details].sort((a, b) => a - b), [...referenced].sort((a, b) => a - b));
         const biography_count = result.files.flatMap(file => file.data.sections)
             .filter(section => section.kind?.startsWith('biography:') && section.text).length;
-        assert.equal(biography_count, 109);
+        assert.equal(biography_count, excel('GCGWorldLevel').filter(row => source_text(lang, row.levelDecTextMapHash)).length,
+            'one nonempty biography section per source world-player level');
         const resource = files.get('card-1101').images.find(image => image.kind === 'card_view:cardStaticImageHash');
         (0, assert)(/^\d{17,20}$/.test(resource.name), 'resource hash was not preserved');
         const prince = files.get('stage-20001');

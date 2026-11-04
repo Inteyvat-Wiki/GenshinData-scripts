@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const config = require('../config.json');
+const config = require('../runtime-config');
 
 const sourceRoot = path.join(config.GenshinData_folder, 'BinOutput', 'InterAction');
 const targets = [

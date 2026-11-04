@@ -1,5 +1,6 @@
 {
 	"GenshinData_folder": "D:\\genshin data",
+	"textmap_history_refs": ["refs/remotes/origin/master", "HEAD"],
 
 	"genshin_export_folder": "D:\\GenshinData-scripts\\export",
 	"genshin_output_folder": "D:\\genshin-db\\src\\data",

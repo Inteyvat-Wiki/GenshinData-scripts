@@ -1,5 +1,7 @@
 # TextMap 推断版本
 
+新 `prepare()` 接口的历史范围、快照身份和依赖持久化见 [缓存接口](../docs/cache-provider.md)。它按显式 historyRefs 拼接固定提交的 first-parent 序列；本地实际源仓库需要 master 与 HEAD 两段，单独 HEAD 仅有 7 个快照。下文旧命令仍保留原有 `--all` 历史模式；经过模式、语言、源目录和完整前缀验证后，可将旧 SQLite 状态只读迁移到新缓存。对象哈希依赖现额外保存为内部 `dependencies/<folder>.json`，不进入网站展示字段。
+
 `npm start` 在导出前自动构建历史索引；`npm run buildversions` 只构建索引。
 `npm run exportversions` 仅根据简体中文和英文重新计算并导出对象版本表，不改动现有正文、图片、数值曲线或 InterAction 文件；此模式依赖现有 `export/EN` 数据（故事、语音、秘境补充需要它）。常规 `npm start` 仍导出全部 15 种语言的正文，但版本推断只使用 CHS/EN；各语言查询共用同一版本表。
 要求 Node.js 22.13+（内置 SQLite）及非浅克隆的源数据 Git 仓库。

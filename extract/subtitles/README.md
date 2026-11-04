@@ -11,6 +11,18 @@ matching Excel/Bin/TextMap revision. Missing or empty Lua input fails the explic
 export command; the ordinary main export preserves existing subtitle output when
 the Lua directory is absent and prints a warning.
 
+Resource acquisition is separate: `@inteyvat-wiki/resource-tools` provides
+`extractLuaResources` / `resource-tools extract-lua` for exact block/Offset/Type/
+PathID plans. It preserves bytes, requires the Lua signature, groups reads by
+source block and emits numbered files plus provenance. Game script identity,
+bytecode interpretation and subtitle attachment remain in this repository.
+The resource package's `docs/pipeline.md` covers the full flow.
+
+Real positive samples, non-Lua rejection and wrong-Offset rejection have been
+verified. Do not point the production provider at a sample output directory:
+first verify complete input coverage and run subtitle regressions against the
+existing dataset. The new resource API has not replaced production Lua input.
+
 ```text
 npm run export:subtitles
 npm run test:subtitles

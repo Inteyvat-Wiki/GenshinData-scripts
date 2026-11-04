@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { get_task_lua_placements } = require('./task_lua');
 const project = path.resolve(__dirname, '../..');
-const config = require('../../config.json');
+const config = require('../../runtime-config');
 const source_path = config.GenshinData_folder;
 const language_codes = {
     zh_hans: 'CHS', zh_hant: 'CHT', en: 'EN', de: 'DE', es: 'ES', fr: 'FR',

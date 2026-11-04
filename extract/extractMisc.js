@@ -1,5 +1,6 @@
 // Text-only client catalogues. No ArchiveRecord, Lua, rewards, or Wiki dependency.
 const source = require('./misc/source');
+const { resolveMaterialSourceFields, resolveProfilePictureFields, resolveLocalLegendFields, resolveLoadingSituationFields, monsterIds } = require('./misc/schema');
 const tracking = require('../versions/tracking');
 
 const tables = {
@@ -17,7 +18,15 @@ function buildMisc(language, input = source) {
     const output = {};
     let order = 0;
     const rows = table => input.excel(table);
-    const index = (table, key = 'id') => new Map(rows(table).map(row => [row[key] ?? 0, row]));
+    const index = (table, key = 'id') => {
+        const result = new Map();
+        for (const row of rows(table)) {
+            const id = row[key] ?? 0;
+            if (result.has(id)) throw new Error(`Ambiguous misc source ID: ${table}.${key}:${id}`);
+            result.set(id, row);
+        }
+        return result;
+    };
     const diagnose = (item, message) => {
         if (!(item.diagnostics ||= []).includes(message)) item.diagnostics.push(message);
     };
@@ -125,6 +134,7 @@ function buildMisc(language, input = source) {
     }
 
     const materials = index(tables.namecard), sources = index('MaterialSourceDataExcelConfigData');
+    const materialSourceFields = resolveMaterialSourceFields([...sources.values()]);
     for (const row of materials.values()) {
         if (row.materialType !== 'MATERIAL_NAMECARD') continue;
         const item = create('namecard', row, row.nameTextMapHash, row.descTextMapHash);
@@ -133,9 +143,9 @@ function buildMisc(language, input = source) {
         const acquisition = sources.get(row.id);
         fk(item, 'MaterialSourceDataExcelConfigData', row.id);
         if (!acquisition) diagnose(item, `missing_relation:MaterialSourceDataExcelConfigData:${row.id}`);
-        // HNNPIIJLLEK is this revision's jump-description TextMap list. Do not
+        // This is the calibrated jump-description TextMap list. Do not
         // interpret the other arrays (dungeons/conditions) as text or rewards.
-        for (const hash of [...(acquisition?.textList || []), ...(acquisition?.jumpDescs || acquisition?.HNNPIIJLLEK || [])]) {
+        for (const hash of [...(acquisition?.textList || []), ...(acquisition?.[materialSourceFields.jumpDescs] || [])]) {
             const value = text(item, hash, 'acquisition');
             if (value && !item.sections.some(s => s.kind === 'acquisition' && s.text === value)) item.sections.push({ kind: 'acquisition', text: value });
         }
@@ -156,15 +166,17 @@ function buildMisc(language, input = source) {
         2: [10000007, '{NICKNAME}'], 21: [10000007, '{NICKNAME}'],
         6000: [10000075, '{REALNAME[ID(1)]}'],
     };
-    for (const row of rows(tables.profile_picture)) {
+    const profilePictures = rows(tables.profile_picture), profileFields = resolveProfilePictureFields(profilePictures);
+    for (const row of profilePictures) {
+        const nameAvatar = row[profileFields.nameAvatar], unlockType = row[profileFields.unlockType];
+        if (typeof unlockType !== 'string') throw new Error(`Missing ProfilePicture unlockType: ${row.id}`);
         const item = create('profile_picture', row, row.nameTextMapHash, row.unlockDescTextMapHash);
         if (Object.hasOwn(nameFormats, row.id) && item.name.includes('{0}')) {
             const [avatarId, token] = nameFormats[row.id];
-            if (row.HOKCMBCOBAO !== avatarId) throw new Error(`Profile picture name avatar changed: ${row.id}`);
+            if (nameAvatar !== avatarId) throw new Error(`Profile picture name avatar changed: ${row.id}`);
             item.name = item.name.replaceAll('{0}', token);
         }
         image(item, row.iconPath, 'icon');
-        const unlockType = row.unlockType || row.NLAPNBMECDF;
         reference(item, `unlockType:${unlockType}`);
         if (unlocks[unlockType]) {
             const [targets, table, category, key, role] = unlocks[unlockType], target = targets.get(row.unlockParam);
@@ -192,20 +204,24 @@ function buildMisc(language, input = source) {
         relation(item, 'region', city, 'CityConfigData', row.cityId, city?.cityNameTextMapHash, 'region');
     }
     const monsters = index('MonsterExcelConfigData'), describes = index('MonsterDescribeExcelConfigData');
-    for (const row of rows(tables.gallant_path)) {
+    const legends = rows(tables.gallant_path), legendFields = resolveLocalLegendFields(legends);
+    for (const row of legends) {
         const item = create('gallant_path', row, row.nameTextMapHash, row.descTextMapHash);
         // LocalLegend hashes/prefab are unextracted dedicated resources. A monster
         // icon is explicitly marked as such and must not masquerade as artwork.
-        for (const value of [row.iconHash, row.DFBBICALCFF, row.prefabName]) reference(item, value);
-        const monster = monsters.get(row.monsterId), describe = describes.get(monster?.describeId);
-        relation(item, 'enemy', monster, 'MonsterExcelConfigData', row.monsterId, monster?.nameTextMapHash, 'monster');
-        if (monster?.describeId) fk(item, 'MonsterDescribeExcelConfigData', monster.describeId);
-        if (!describe) diagnose(item, `missing_monster_describe:${monster?.describeId}`);
-        image(item, describe?.icon, 'monster_icon');
+        for (const value of [row.iconHash, row[legendFields.resource], row.prefabName]) reference(item, value);
+        for (const monsterId of monsterIds(row, legendFields.monsters)) {
+            const monster = monsters.get(monsterId), describe = describes.get(monster?.describeId);
+            relation(item, 'enemy', monster, 'MonsterExcelConfigData', monsterId, monster?.nameTextMapHash, 'monster');
+            if (monster?.describeId) fk(item, 'MonsterDescribeExcelConfigData', monster.describeId);
+            if (!describe) diagnose(item, `missing_monster_describe:${monster?.describeId}`);
+            image(item, describe?.icon, 'monster_icon');
+        }
         diagnose(item, 'dedicated_illustration_unresolved');
     }
 
     const situations = index('LoadingSituationExcelConfigData', 'stageID');
+    const situationFields = resolveLoadingSituationFields([...situations.values()]);
     const loadingAreas = rows('WorldAreaConfigData').filter(area => area.areaType === 'LEVEL_1');
     const loadingDungeons = index('DungeonExcelConfigData');
     for (const row of rows(tables.loading_tip)) {
@@ -220,6 +236,7 @@ function buildMisc(language, input = source) {
                 relation(item, 'loading_situation', situation, 'LoadingSituationExcelConfigData', stage, undefined, 'stage');
                 image(item, situation?.picPath, 'loading_background');
                 if (situation) {
+                    const dungeonIds = situation[situationFields.dungeons];
                     const areas = (situation.area1ID || []).map(id => {
                         const matches = loadingAreas.filter(area => area.areaID1 === id
                             && (!situation.sceneID?.length || situation.sceneID.includes(area.sceneID)));
@@ -233,7 +250,7 @@ function buildMisc(language, input = source) {
                         ...(situation.areaTerrainType ? { terrain: situation.areaTerrainType } : {}),
                         ...(situation.sceneID?.length ? { scene_ids: situation.sceneID.map(String) } : {}),
                         ...(situation.dungeonType ? { dungeon_type: situation.dungeonType } : {}),
-                        ...(situation.LLPOIIOJKOC?.length ? { dungeons: situation.LLPOIIOJKOC.map(id => {
+                        ...(dungeonIds?.length ? { dungeons: dungeonIds.map(id => {
                             const dungeon = loadingDungeons.get(id);
                             if (!dungeon) throw new Error(`Missing loading dungeon: ${stage}:${id}`);
                             fk(item, 'DungeonExcelConfigData', id);

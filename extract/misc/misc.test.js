@@ -13,13 +13,63 @@ const byType = type => records.filter(item => item.type === type);
 const read = table => source.excel(table);
 const text = (language, hash) => source.text(language, hash);
 const tableIndex = (table, key = 'id') => new Map(read(table).map(row => [row[key] ?? 0, row]));
+// Test oracles read raw rows, never the production alias/selection helpers or
+// output counts. Keep an exact expected ID set so omissions and extras fail.
+const rawField = (row, ...keys) => {
+    const present = keys.filter(key => Object.hasOwn(row, key));
+    assert(present.length, `Missing raw test field: ${keys.join('/')}`);
+    for (const key of present) assert.deepEqual(row[key], row[present[0]]);
+    return row[present[0]];
+};
+const eligibleAchievements = () => read('AchievementExcelConfigData').filter(row => !row.isDisuse && row.id !== 84517
+    && ['CHS', 'EN'].some(language => text(language, row.titleTextMapHash))
+    && (!row.preStageAchievementId || ['CHS', 'EN'].some(language => text(language, row.descTextMapHash))));
+const rawTutorialDetails = tableIndex('TutorialDetailExcelConfigData');
+const tutorialDetails = row => ['detailIdList', 'mobileDetailIdList', 'joypadDetailIdList']
+    .flatMap(key => row[key] || []).map(id => rawTutorialDetails.get(id));
+const excludedTutorial = row => tutorialDetails(row).some(detail => detail?.imageNameList?.some(
+    name => name.startsWith('UI_Tutorial_Byd') || name.startsWith('UI_Activity_Byd')));
+
+test('real source fields can all be renamed per table without changing bilingual output', () => {
+    for (const revision of ['first', 'second']) {
+        const tables = new Map();
+        const input = { ...source, excel: table => {
+            if (!tables.has(table)) {
+                const rows = read(table), keys = [...new Set(rows.flatMap(Object.keys))];
+                const renamed = new Map(keys.filter(key => /^[A-Z]{11}$/.test(key)
+                    || ['jumpDescs', 'unlockType', 'monsterId', 'monsterIdList'].includes(key))
+                    .map((key, i) => [key, `private_${revision}_${table}_${i}`]));
+                tables.set(table, rows.map(row => Object.fromEntries(Object.entries(row).reverse().map(([key, value]) => [renamed.get(key) || key, value]))));
+            }
+            return tables.get(table);
+        } };
+        for (const [language, expected] of [['CHS', chs], ['EN', en]]) {
+            const renamed = tracking.collate(lang => build(lang, input), language);
+            assert.deepEqual(renamed, expected, `${revision}/${language}`);
+            for (const id of Object.keys(expected)) assert.deepEqual(tracking.collectHashes(renamed[id]), tracking.collectHashes(expected[id]));
+        }
+        const original = tracking.collate(build, 'CHS');
+        assert.deepEqual(original, chs, 'inference must remain local to the current input');
+    }
+});
 
 test('snapshot coverage, real source IDs, bilingual identity, and exact contract', () => {
     assert.deepEqual(Object.keys(chs), Object.keys(en));
-    assert.deepEqual(Object.fromEntries(Object.entries(Object.groupBy(records, r => r.type)).map(([type, items]) => [type, items.length])), {
-        achievement: 1854, achievement_group: 73, namecard: 293, profile_picture: 188, profile_frame: 12, expedition: 48,
-        gallant_path: 13, loading_tip: 995, tutorial: 2268, graeae_message: 28,
-    });
+    const expected = {
+        achievement: eligibleAchievements(), achievement_group: read('AchievementGoalExcelConfigData'),
+        namecard: read('MaterialExcelConfigData').filter(row => row.materialType === 'MATERIAL_NAMECARD'),
+        profile_picture: read('ProfilePictureExcelConfigData'), profile_frame: read('ProfileFrameExcelConfigData'),
+        expedition: read('ExpeditionDataExcelConfigData'), gallant_path: read('LocalLegendExcelConfigData'),
+        loading_tip: read('LoadingTipsExcelConfigData').filter(row => row.id < 1940 || row.id > 1948),
+        tutorial: read('TutorialExcelConfigData').filter(row => !excludedTutorial(row)),
+        graeae_message: read('TpsGlassesChatTopicExcelConfigData'),
+    };
+    assert.deepEqual(new Set(records.map(item => item.type)), new Set(Object.keys(expected)));
+    for (const [type, rows] of Object.entries(expected)) {
+        const ids = rows.map(row => `${type}-${type === 'graeae_message' ? rawField(row, 'KEKHMPOIFHO', 'CNMPAADJIFL') : row.id ?? 0}`);
+        assert.equal(new Set(ids).size, rows.length, `unique source IDs: ${type}`);
+        assert.deepEqual(byType(type).map(item => item.id).sort(), ids.sort(), type);
+    }
     const allowed = ['id', 'order', 'show', 'type', 'name', 'description', 'sections', 'images', 'relations', 'source', 'diagnostics', 'version', 'loading_situations', 'tutorial_category', 'message_thread'];
     for (const [language, data] of [['CHS', chs], ['EN', en]]) for (const [id, item] of Object.entries(data)) {
         assert.equal(id, `${item.type}-${item.source.id}`);
@@ -29,7 +79,7 @@ test('snapshot coverage, real source IDs, bilingual identity, and exact contract
         assert.equal(typeof item.name, 'string');
         assert.equal(typeof item.description, 'string');
         assert(Object.keys(item).every(key => allowed.includes(key)), id);
-        assert(read(item.source.table).some(row => String(item.type === 'graeae_message' ? row.KEKHMPOIFHO : row.id ?? 0) === item.source.id), id);
+        assert(read(item.source.table).some(row => String(item.type === 'graeae_message' ? rawField(row, 'KEKHMPOIFHO', 'CNMPAADJIFL') : row.id ?? 0) === item.source.id), id);
         assert(item.source.hashes.every(hash => typeof hash === 'string' && /^\d+$/.test(hash) && Number(hash) <= 0xFFFFFFFF));
         assert((item.source.references || []).every(ref => typeof ref === 'string'));
         for (const img of item.images) {
@@ -56,12 +106,10 @@ test('snapshot coverage, real source IDs, bilingual identity, and exact contract
 });
 
 test('achievements flatten every valid stage, retaining duplicate names and preStage FKs', () => {
-    const rows = read('AchievementExcelConfigData');
     for (const language of ['CHS', 'EN']) {
         const data = language === 'CHS' ? chs : en;
-        const valid = rows.filter(row => !row.isDisuse && row.id !== 84517 && text(language, row.titleTextMapHash)
-            && (!row.preStageAchievementId || text(language, row.descTextMapHash)));
-        assert.equal(valid.length, 1854);
+        const valid = eligibleAchievements();
+        assert.deepEqual(Object.values(data).filter(item => item.type === 'achievement').map(item => item.id), valid.map(row => `achievement-${row.id}`));
         for (const row of valid) {
             const item = data[`achievement-${row.id}`];
             assert.equal(item.name, text(language, row.titleTextMapHash));
@@ -98,7 +146,8 @@ test('achievement description numbers use each stage target without exporting nu
             assert(!/\{param\d+\}/.test(item.description), item.id);
             assert(!('progress' in item));
         }
-        assert.equal(replaced, 163);
+        assert.equal(replaced, eligibleAchievements().filter(row => text(language, row.descTextMapHash).includes('{param0}')).length);
+        assert(replaced > 0);
         for (const [id, target] of [[80197, 30], [80198, 150], [80199, 300]]) {
             assert(data[`achievement-${id}`].description.includes(String(target)));
         }
@@ -119,7 +168,7 @@ test('namecards use material IDs, preserve acquisition hashes and all image refe
         assert.equal(item.description, text('CHS', row.descTextMapHash));
         for (const image of [row.icon, ...(row.picPath || [])].filter(Boolean)) assert(item.images.some(i => i.name === image));
         const acquisition = sources.get(row.id);
-        for (const hash of [...acquisition.textList, ...acquisition.HNNPIIJLLEK]) {
+        for (const hash of [...acquisition.textList, ...rawField(acquisition, 'jumpDescs', 'HNNPIIJLLEK')]) {
             assert(item.source.hashes.includes(String(hash)));
             if (text('CHS', hash)) assert(item.sections.some(s => s.kind === 'acquisition' && s.text === text('CHS', hash)));
         }
@@ -135,12 +184,15 @@ test('profile name formatting is narrow, bilingual and retains original TextMap 
         assert(item.source.hashes.includes(String(row.nameTextMapHash)));
     }
     const fixture = (id, avatar) => ({
-        excel: table => table === 'ProfilePictureExcelConfigData' ? [{ id, HOKCMBCOBAO: avatar, nameTextMapHash: 10 }] : [],
+        excel: table => table === 'ProfilePictureExcelConfigData' ? [
+            { id: 1, avatar: 10000005, type: 'PROFILE_PICTURE_UNLOCK_BY_AVATAR' },
+            { id: 11, avatar: 10000005, type: 'PROFILE_PICTURE_UNLOCK_BY_COSTUME' },
+            { id, avatar, nameTextMapHash: 10, type: 'PROFILE_PICTURE_UNLOCK_BY_DEFAULT' }] : [],
         text: () => 'Original {0} / {1}',
     });
     assert.equal(build('CHS', fixture(123456, 10000005))['profile_picture-123456'].name, 'Original {0} / {1}');
-    assert.equal(build('CHS', fixture(1, 10000005))['profile_picture-1'].name, 'Original {NICKNAME} / {1}');
-    assert.throws(() => build('CHS', fixture(1, 10000075)), /name avatar changed/);
+    assert.equal(build('CHS', fixture(2, 10000007))['profile_picture-2'].name, 'Original {NICKNAME} / {1}');
+    assert.throws(() => build('CHS', fixture(2, 10000075)), /name avatar changed/);
 });
 
 test('profile pictures only link the unlockType-specific FK; test entry hidden, never renamed', () => {
@@ -151,11 +203,18 @@ test('profile pictures only link the unlockType-specific FK; test entry hidden, 
         PROFILE_PICTURE_UNLOCK_BY_PARENT_QUEST: ['MainQuestExcelConfigData', 'id', 'task', 'unlock_quest'],
     };
     for (const row of read('ProfilePictureExcelConfigData')) {
-        const item = chs[`profile_picture-${row.id}`], target = mapping[row.NLAPNBMECDF];
-        if (!target) { assert.equal(item.relations.length, 0); continue; }
+        const unlockType = rawField(row, 'unlockType', 'NLAPNBMECDF', 'FBFBNKHLFAO');
+        const item = chs[`profile_picture-${row.id}`], target = mapping[unlockType];
+        assert(item.source.references.includes(`unlockType:${unlockType}`));
+        if (!target) { assert.equal(unlockType, 'PROFILE_PICTURE_UNLOCK_BY_DEFAULT'); assert.equal(item.relations.length, 0); continue; }
         const [table, key, category, role] = target;
         assert(tableIndex(table, key).has(row.unlockParam), `${row.id}: ${table}/${row.unlockParam}`);
         assert.deepEqual(item.relations.map(rel => [rel.category, rel.role, rel.source_id]), [[category, role, row.unlockParam]]);
+        if (row.HOKCMBCOBAO || row.GEMAPGHIKKG) {
+            const avatarId = rawField(row, 'HOKCMBCOBAO', 'GEMAPGHIKKG');
+            assert(tableIndex('AvatarExcelConfigData').has(avatarId));
+            assert.equal(avatarId, role === 'unlock_avatar' ? row.unlockParam : tableIndex(table, key).get(row.unlockParam).characterId);
+        }
     }
     const item = chs['profile_picture-99999'];
     assert.equal(item.show, false);
@@ -182,7 +241,7 @@ test('uint64 image/reference hashes are exact source lexemes, never rounded numb
     const original = fs.readFileSync(file, 'utf8');
     for (const row of read('LocalLegendExcelConfigData')) {
         const item = chs[`gallant_path-${row.id}`];
-        for (const hash of [row.iconHash, row.DFBBICALCFF]) {
+        for (const hash of [row.iconHash, rawField(row, 'DFBBICALCFF', 'CBAPFGGBHEA')]) {
             assert.equal(typeof hash, 'string');
             assert(original.includes(hash));
             assert(item.source.references.includes(hash));
@@ -201,13 +260,22 @@ test('expedition city FKs and LocalLegend-specific monster/describe icons are no
         assert(item.relations.some(rel => rel.role === 'region' && rel.source_id === row.cityId && rel.name === text('CHS', city.cityNameTextMapHash)));
     }
     for (const row of read('LocalLegendExcelConfigData')) {
-        const item = chs[`gallant_path-${row.id}`], monster = monsters.get(row.monsterId), describe = describes.get(monster.describeId);
-        assert(monster && describe);
+        const item = chs[`gallant_path-${row.id}`], ids = row.monsterIdList ?? [row.monsterId];
         assert.equal(item.description, text('CHS', row.descTextMapHash));
-        assert.deepEqual(item.images, [{ name: describe.icon, kind: 'monster_icon' }]);
+        const icons = [];
+        const missingDescribes = [];
+        for (const id of ids) {
+            const monster = monsters.get(id), describe = describes.get(monster?.describeId);
+            assert(monster, `Missing source monster: ${row.id}/${id}`);
+            assert(item.source.references.includes(`MonsterDescribeExcelConfigData:${monster.describeId}`));
+            if (!describe) missingDescribes.push(`missing_monster_describe:${monster.describeId}`);
+            else if (describe.icon && !icons.includes(describe.icon)) icons.push(describe.icon);
+        }
+        assert.deepEqual(item.images, icons.map(name => ({ name, kind: 'monster_icon' })));
+        assert.deepEqual(item.diagnostics.filter(value => value.startsWith('missing_monster_describe:')), [...new Set(missingDescribes)]);
         assert(item.source.references.includes(row.prefabName));
         assert(item.diagnostics.includes('dedicated_illustration_unresolved'));
-        assert(item.relations.some(rel => rel.source_id === monster.id && rel.role === 'monster'));
+        assert.deepEqual(item.relations.map(rel => [rel.source_id, rel.role]), ids.map(id => [id, 'monster']));
     }
 });
 
@@ -241,7 +309,14 @@ test('loading stage FKs keep multiple backgrounds; malformed stages are not part
                 assert.deepEqual(value.image, raw.picPath ? { name: raw.picPath, kind: 'loading_background' } : undefined);
                 assert.deepEqual(value.scene_ids, raw.sceneID?.length ? raw.sceneID.map(String) : undefined);
                 assert.equal(value.dungeon_type, raw.dungeonType);
-                assert.deepEqual(value.dungeons?.map(value => value.id), raw.LLPOIIOJKOC?.map(String));
+                const dungeonIds = raw.LLPOIIOJKOC ?? raw.CLKAAOHKPBH;
+                assert.deepEqual(value.dungeons?.map(value => value.id), dungeonIds?.map(String));
+                for (const dungeon of value.dungeons || []) {
+                    const sourceDungeon = tableIndex('DungeonExcelConfigData').get(Number(dungeon.id));
+                    assert(sourceDungeon);
+                    assert.equal(dungeon.name, text(language, sourceDungeon.nameTextMapHash));
+                    assert(result.source.references.includes(`DungeonExcelConfigData:${dungeon.id}`));
+                }
                 assert.equal(value.areas.length, (raw.area1ID || []).length);
                 for (const area of value.areas) {
                     const sourceArea = areaIndex.get(Number(area.id));
@@ -254,14 +329,16 @@ test('loading stage FKs keep multiple backgrounds; malformed stages are not part
         if (expected.length > 1) multiple++;
     }
     assert(multiple > 0);
-    assert.equal(malformed, 2);
+    assert.equal(malformed, read('LoadingTipsExcelConfigData').filter(row => (row.id < 1940 || row.id > 1948)
+        && row.stageID && !/^[1-9]\d*(?:,[1-9]\d*)*$/.test(row.stageID)).length);
     for (let id = 1928; id <= 1939; id++) assert(chs[`loading_tip-${id}`].relations.some(r => r.category === 'miliastra'));
 });
 
 test('loading regions use scene-constrained level-one FKs, not images or translated names', () => {
     const tables = {
         LoadingTipsExcelConfigData: [{ id: 1, tipsTitleTextMapHash: 10, stageID: '1' }],
-        LoadingSituationExcelConfigData: [{ stageID: 1, sceneID: [3], area1ID: [1], loadingSituationType: 'SITUATION_TYPE_COMMON_TRANSPORT' }],
+        LoadingSituationExcelConfigData: [{ stageID: 1, sceneID: [3], area1ID: [1], loadingSituationType: 'SITUATION_TYPE_COMMON_TRANSPORT' },
+            { stageID: 65, dungeonField: [156] }, { stageID: 66, dungeonField: [149, 150, 151] }],
         WorldAreaConfigData: [{ id: 100, areaID1: 1, sceneID: 3, areaType: 'LEVEL_1', areaNameTextMapHash: 20 },
             { id: 101, areaID1: 1, sceneID: 5, areaType: 'LEVEL_1', areaNameTextMapHash: 21 }],
     };
@@ -310,48 +387,99 @@ test('tutorial details and images follow actual platform lists, including missin
             if (!item.name) assert(item.diagnostics.some(d => d.startsWith('missing_name:')));
         }
     }
-    assert.deepEqual(excluded, [2419, 2420, 2430, 2556, 2557, 2659, 2660, 2661]);
+    assert.deepEqual(excluded, read('TutorialExcelConfigData').filter(excludedTutorial).map(row => row.id));
+    assert(excluded.length > 0);
     assert(missing > 0 && imageOnly > 0 && sharedPlatformImage > 0);
     assert(chs['tutorial-1771']); // Title comes from PushTips, NOT assumed detailId arithmetic.
     assert(chs['tutorial-1451']); // Old UGC creator event is not Miliastra.
 });
 
 test('titleless tutorials stay visible; activity titles are resolved without inventing names', () => {
-    for (const [data, missingNames, bodyCount] of [[chs, 399, 212], [en, 439, 220]]) {
+    const pushes = [...read('PushTipsConfigData'), ...read('NewActivityPushTipsConfigData')];
+    const ids = rows => rows.map(row => typeof row.id === 'number' ? `tutorial-${row.id}` : row.id).sort();
+    // Reviewed source exceptions are identities, not a snapshot-wide row count.
+    const unavailable = [1171, 1172, 1183, 1344, 1345, 1346, 2623].map(id => `tutorial-${id}`).sort();
+    for (const [language, data] of [['CHS', chs], ['EN', en]]) {
+        const expected = read('TutorialExcelConfigData').filter(row => !excludedTutorial(row)
+            && !pushes.some(push => push.tutorialId === row.id && text(language, push.titleTextMapHash)));
         const titleless = Object.values(data).filter(item => item.type === 'tutorial' && item.name === '');
-        assert.equal(titleless.length, missingNames);
+        assert.deepEqual(ids(titleless), ids(expected));
         const withBody = titleless.filter(item => item.sections.some(s => ['PC', 'Mobile', 'PS'].includes(s.kind) && s.text));
-        assert.equal(withBody.length, bodyCount);
+        const expectedBody = expected.filter(row => tutorialDetails(row).some(detail => text(language, detail?.descriptTextMapHash)));
+        assert.deepEqual(ids(withBody), ids(expectedBody));
         for (const item of withBody) {
             assert.equal(item.show, true, item.id);
             assert.equal(item.name, '');
             assert(item.diagnostics.some(d => d.startsWith('missing_name:')));
         }
         const imageOnly = titleless.filter(item => item.images.length && !withBody.includes(item));
-        assert.equal(imageOnly.length, data === chs ? 169 : 200);
+        const expectedImages = expected.filter(row => !expectedBody.includes(row)
+            && (tutorialDetails(row).some(detail => detail?.imageNameList?.length)
+                || pushes.some(push => push.tutorialId === row.id && (push.showIcon || push.tabIcon))));
+        assert.deepEqual(ids(imageOnly), ids(expectedImages));
         assert(imageOnly.every(item => item.show || item.diagnostics.includes('unavailable_tutorial_source')));
-        assert.equal(imageOnly.filter(item => !item.show).length, 7);
+        assert.deepEqual(ids(imageOnly.filter(item => !item.show)), unavailable);
+        assert(withBody.length > 0 && imageOnly.length > 0);
     }
     assert.equal(chs['profile_picture-99999'].show, false);
 });
 
 test('Graeae topics preserve full messages, options and exact graph edges in both languages', () => {
-    const rawMessages = read('TpsGlassesChatMessageExcelConfigData'), rawOptions = read('TpsGlassesChatOptionExcelConfigData');
+    const optional = (row, ...keys) => keys.some(key => Object.hasOwn(row, key)) ? rawField(row, ...keys) : undefined;
+    const rawMessages = read('TpsGlassesChatMessageExcelConfigData').map(row => ({
+        id: `message-${rawField(row, 'AEFJCKAJMFL', 'JCAHMOFECFE')}`,
+        topic: rawField(row, 'HAOFOHIJENC', 'DILKJNMPNFL'), position: rawField(row, 'JJGAICEDLNP', 'PKHEFFOICKC'),
+        next: optional(row, 'LICNBELGBCN', 'HLFBKDKAAGG'), requires: optional(row, 'PADEPANADLD', 'OLFMIDDKIKO'),
+        text: rawField(row, 'GEJENCICCEC', 'AHDCIPDCMFP'), preview: rawField(row, 'DBMAKNMIGLP', 'CHDGFMBOPPP'),
+        kind: optional(row, 'FJHBPBFGDNN', 'FGICGCKEFAK') || 'CONTROL', speaker: row.characterId,
+        image: optional(row, 'HCHADPEJPLB', 'HLFGNGHKCJD'), thumbnail: optional(row, 'HEEHCBAOFIK', 'EAKBCADOOLA'),
+        location: optional(row, 'PJIDDONOIGK', 'HNEAFCKDCMA'), quest: optional(row, 'EDGLCIBPKNJ', 'OAPNJMAJKBM'),
+    }));
+    const rawOptions = read('TpsGlassesChatOptionExcelConfigData').map(row => ({
+        id: `option-${rawField(row, 'HANOBLDBAPA', 'MEEMNJEJMPJ')}`,
+        topic: rawField(row, 'HAOFOHIJENC', 'DILKJNMPNFL'), position: rawField(row, 'BHLEPODADCG', 'CPONCLDGFED'),
+        next: optional(row, 'LICNBELGBCN', 'HLFBKDKAAGG'), requires: optional(row, 'PADEPANADLD', 'OLFMIDDKIKO'),
+        text: rawField(row, 'KLDJCKFKAKI', 'MDJJHKLDBJE'), kind: 'OPTION',
+    }));
+    const allNodes = [...rawMessages, ...rawOptions];
+    const rawTopics = read('TpsGlassesChatTopicExcelConfigData');
+    const characters = tableIndex('TpsGlassesChatCharacterExcelConfigData', 'characterId');
     for (const [language, data] of [['CHS', chs], ['EN', en]]) {
         const topics = Object.values(data).filter(item => item.type === 'graeae_message');
-        assert.equal(topics.filter(item => item.show).length, 24);
         assert.equal(topics.flatMap(item => item.message_thread.nodes).length, rawMessages.length + rawOptions.length);
         for (const item of topics) {
+            const topic = rawTopics.find(row => rawField(row, 'KEKHMPOIFHO', 'CNMPAADJIFL') === Number(item.source.id));
+            assert(topic);
+            assert.equal(item.name, text(language, rawField(topic, 'LBCPBPBJDAB', 'JDMOCEGAAGK')));
+            const expected = allNodes.filter(row => String(row.topic) === item.source.id);
+            assert.deepEqual(item.message_thread.initial, expected.filter(row => row.position === 1).map(row => row.id));
+            assert.deepEqual(item.message_thread.nodes.map(node => node.id), [...expected].sort((a, b) => a.position - b.position).map(row => row.id));
+            assert.equal(item.show, !!item.name && expected.some(row => text(language, row.text) || row.kind === 'IMAGE' && row.image));
+            const icon = optional(topic, 'DGKPMJKEGDO', 'OEOMPAGFEJM');
+            if (icon) assert(item.source.references.includes(icon));
             const nodes = new Map(item.message_thread.nodes.map(node => [node.id, node]));
             for (const node of nodes.values()) {
                 assert(node.next.every(id => nodes.has(id)));
                 if (node.requires) assert.equal(nodes.get(node.requires)?.kind, 'OPTION');
-                const raw = node.kind === 'OPTION' ? rawOptions.find(row => `option-${row.HANOBLDBAPA}` === node.id)
-                    : rawMessages.find(row => `message-${row.AEFJCKAJMFL}` === node.id);
-                assert.equal(String(raw.HAOFOHIJENC), item.source.id);
-                assert.equal(node.text, text(language, raw.GEJENCICCEC ?? raw.KLDJCKFKAKI));
-                const targets = raw.LICNBELGBCN ? [...rawMessages.filter(row => row.HAOFOHIJENC === raw.HAOFOHIJENC && row.JJGAICEDLNP === raw.LICNBELGBCN).map(row => `message-${row.AEFJCKAJMFL}`),
-                    ...rawOptions.filter(row => row.HAOFOHIJENC === raw.HAOFOHIJENC && row.BHLEPODADCG === raw.LICNBELGBCN).map(row => `option-${row.HANOBLDBAPA}`)] : [];
+                const raw = expected.find(row => row.id === node.id);
+                assert.equal(node.kind, raw.kind);
+                assert.equal(node.text, text(language, raw.text));
+                assert.equal(node.preview, text(language, raw.preview) || undefined);
+                assert.equal(node.requires, raw.requires ? `option-${raw.requires}` : undefined);
+                if (raw.speaker) {
+                    const character = characters.get(raw.speaker);
+                    assert(character);
+                    assert.equal(node.speaker, text(language, rawField(character, 'HALPCBNIPJP', 'AMPOJAAMOBL')));
+                    assert(item.source.references.includes(rawField(character, 'IMPGHHNHBBD', 'AKMEGJBMBMP')));
+                }
+                if (raw.kind === 'IMAGE' && raw.image) {
+                    assert.deepEqual(node.image, { name: raw.image, kind: 'illustration' });
+                    assert(item.images.some(image => image.name === raw.image && image.kind === 'illustration'));
+                    if (raw.thumbnail) assert(item.source.references.includes(raw.thumbnail));
+                }
+                if (raw.kind === 'LOCATION') assert.equal(node.location, text(language, raw.location));
+                if (raw.quest) assert(item.source.references.includes(`GraeaeLocationQuest:${raw.quest}`));
+                const targets = raw.next ? expected.filter(row => row.position === raw.next).map(row => row.id) : [];
                 assert.deepEqual(node.next, targets);
             }
         }
@@ -414,8 +542,9 @@ test('reward/progress/cost numerics never leak anywhere in a record', () => {
 
 test('missing translations, broken source FKs and unnamed image-only rows stay explicit', () => {
     const tables = {
-        ProfilePictureExcelConfigData: [{ id: 1, nameTextMapHash: 10, unlockDescTextMapHash: 11,
-            NLAPNBMECDF: 'PROFILE_PICTURE_UNLOCK_BY_COSTUME', unlockParam: 200501, iconPath: 'Portrait' }],
+        ProfilePictureExcelConfigData: [{ id: 1, avatarField: 10000005, unlockField: 'PROFILE_PICTURE_UNLOCK_BY_AVATAR' },
+            { id: 11, avatarField: 10000005, nameTextMapHash: 10, unlockDescTextMapHash: 11,
+                unlockField: 'PROFILE_PICTURE_UNLOCK_BY_COSTUME', unlockParam: 200501, iconPath: 'Portrait' }],
         TutorialExcelConfigData: [{ id: 5, detailIdList: [77], mobileDetailIdList: [88], joypadDetailIdList: [99] }],
         TutorialDetailExcelConfigData: [{ id: 77, descriptTextMapHash: 12, imageNameList: ['ImageOnly'] },
             { id: 99, descriptTextMapHash: 13, imageNameList: ['PSImage'] }],
@@ -423,9 +552,9 @@ test('missing translations, broken source FKs and unnamed image-only rows stay e
     };
     const fixture = { excel: table => tables[table] || [], text: (language, hash) => ({ 13: '#raw {LAYOUT_PS#原文}\\n背景', 14: 'Title' }[hash] || '') };
     const result = build('CHS', fixture), tutorial = result['tutorial-5'];
-    assert.equal(result['profile_picture-1'].name, '');
-    assert.equal(result['profile_picture-1'].show, false);
-    assert(result['profile_picture-1'].diagnostics.includes('missing_relation:AvatarCostumeExcelConfigData:200501'));
+    assert.equal(result['profile_picture-11'].name, '');
+    assert.equal(result['profile_picture-11'].show, false);
+    assert(result['profile_picture-11'].diagnostics.includes('missing_relation:AvatarCostumeExcelConfigData:200501'));
     assert.equal(tutorial.sections.find(s => s.kind === 'PC').text, '');
     assert.equal(tutorial.sections.find(s => s.kind === 'Mobile').text, '');
     assert.equal(tutorial.sections.find(s => s.kind === 'PS').text, '#raw {LAYOUT_PS#原文}\\n背景');

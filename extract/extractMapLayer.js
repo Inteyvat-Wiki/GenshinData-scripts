@@ -1,23 +1,24 @@
 require('./global.js');
+const { resolveField, resolveRow } = require('./field-inference');
 
 const xgroup = getExcel('MapLayerGroupExcelConfigData');
 const xfloor = getExcel('MapLayerFloorExcelConfigData');
 const xlayer = getExcel('MapLayerExcelConfigData');
 
 const floor_keys = (() => {
-	let ele = xfloor.find(ele => ele.id === 3270303);
+	const ele = resolveRow(xfloor, 'MapLayerFloor:3270303', row => row.id === 3270303);
 	const language = getLanguage('CHS');
 	return {
-		name: Object.entries(ele).find(([key, value]) => language[value] == '赤王陵西北·未知区域三')[0],
-		name_new: Object.entries(ele).find(([key, value]) => language[value] == '赤王陵西北·岩窟下层')[0],
-		floor: Object.entries(ele).find(([key, value]) => value == -3)[0],
-		group: Object.entries(ele).find(([key, value]) => value == 32703)[0],
+		name: resolveField('MapLayerFloor.name', [{ row: ele, match: value => language[value] === '赤王陵西北·未知区域三' }]),
+		name_new: resolveField('MapLayerFloor.newName', [{ row: ele, match: value => language[value] === '赤王陵西北·岩窟下层' }]),
+		floor: resolveField('MapLayerFloor.number', [{ row: ele, value: -3 }]),
+		group: resolveField('MapLayerFloor.group', [{ row: ele, value: 32703 }]),
 	}
 })();
 const layer_keys = (() => {
-	let ele = xlayer.find(ele => ele.id === 3700102);
+	const ele = resolveRow(xlayer, 'MapLayer:3700102', row => row.id === 3700102);
 	return {
-		layer: Object.entries(ele).find(([key, value]) => value == 3700101)[0],
+		layer: resolveField('MapLayer.floor', [{ row: ele, value: 3700101 }]),
 	}
 })();
 

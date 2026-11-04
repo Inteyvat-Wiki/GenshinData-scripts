@@ -57,13 +57,17 @@ function tree(root, ref) {
     });
 }
 
-function history(root, overrides = {}, log = console.log) {
+function history(root, overrides = {}, log = console.log, ref) {
     if (git(root, ['rev-parse', '--is-shallow-repository']).trim() === 'true') throw new Error('TextMap history requires a non-shallow source repository.');
-    const lines = git(root, ['log', '--all', '--reverse', '--topo-order', '--format=%ct%x09%H%x09%s', '--', 'TextMap']).trim().split('\n').filter(Boolean);
+    const refs = Array.isArray(ref) ? ref : ref ? [ref] : [undefined];
+    const seen = new Set();
+    const lines = refs.flatMap(selected => git(root, ['log', ...(selected ? [selected, '--first-parent'] : ['--all']), '--reverse', '--topo-order', '--format=%ct%x09%H%x09%s', '--', 'TextMap']).trim().split('\n').filter(Boolean))
+        .filter(line => { const sha = line.split('\t')[1]; if (seen.has(sha)) return false; seen.add(sha); return true; });
     const entries = lines.map((line, order) => {
         const [time, ref, ...subject] = line.split('\t');
         return { time: Number(time), ref, order, version: versionOf(subject.join('\t'), ref), subject: subject.join('\t') };
-    }).sort((a, b) => a.time - b.time || a.order - b.order);
+    });
+    if (!ref) entries.sort((a, b) => a.time - b.time || a.order - b.order);
     let previous;
     return entries.map(entry => {
         entry.version = overrides[entry.ref] || entry.version;
@@ -224,28 +228,50 @@ async function build(config, log = console.log) {
     const root = path.resolve(config.GenshinData_folder);
     const dirty = git(root, ['status', '--porcelain', '--', ...VERSION_TEXTMAP_PATHS]).trim();
     if (dirty) throw new Error('TextMap contains uncommitted changes; commit the source snapshot with its release version before building versions.');
-    const snapshots = history(root, config.textmap_version_overrides, log);
+    const snapshots = history(root, config.textmap_version_overrides, log, config.textmap_history_ref);
     if (!snapshots.length) throw new Error('No versioned TextMap history found.');
     const head = git(root, ['rev-parse', 'HEAD']).trim();
     if (git(root, ['diff', '--name-only', snapshots.at(-1).ref, head, '--', ...VERSION_TEXTMAP_PATHS]).trim()) {
         throw new Error('HEAD TextMap differs from the last dated history snapshot.');
     }
     const paths = cachePaths(config);
-    const current = fs.readdirSync(path.join(root, 'TextMap')).filter(file => textPath(`TextMap/${file}`)).sort().map(file => {
-        const stat = fs.statSync(path.join(root, 'TextMap', file));
-        return [file, stat.size, stat.mtimeMs];
-    });
+    const current = tree(root, head).filter(row => textPath(row.file));
     const fingerprint = crypto.createHash('sha256').update(JSON.stringify({ schema: SCHEMA, root, languages: VERSION_LANGUAGES, snapshots, current })).digest('hex');
     let manifest;
     try { manifest = JSON.parse(fs.readFileSync(paths.manifest, 'utf8')); } catch {}
     if (manifest?.fingerprint === fingerprint && fs.existsSync(paths.index)) { log('TextMap versions: cache is current.'); return paths.index; }
     fs.mkdirSync(paths.directory, { recursive: true });
     const { DatabaseSync } = require('node:sqlite');
+    let seeded = false;
+    if (!fs.existsSync(paths.database) && config.textmap_version_seed) {
+        const seedFile = path.join(path.resolve(config.textmap_version_seed), 'history.sqlite');
+        const seed = new DatabaseSync(seedFile, { readOnly: true });
+        const temporary = `${paths.database}.seed-${crypto.randomUUID()}`;
+        try {
+            const meta = key => seed.prepare('SELECT value FROM metadata WHERE key=?').get(key)?.value;
+            const identity = JSON.parse(meta('identity') || 'null');
+            const prefix = JSON.parse(meta('prefix') || '[]');
+            const expected = snapshots.slice(0, prefix.length).map(row => [row.ref, row.version]);
+            if (!identity || identity.schema !== SCHEMA || path.resolve(identity.root) !== root || JSON.stringify(identity.languages) !== JSON.stringify(VERSION_LANGUAGES)
+                || !prefix.length || JSON.stringify(prefix) !== JSON.stringify(expected) || meta('completed') !== prefix.at(-1)[0])
+                throw new Error('History seed does not match the selected source, languages, algorithm or ordered history prefix');
+            // VACUUM INTO takes a consistent SQLite snapshot, including committed WAL data.
+            // A raw copy of history.sqlite alone would not be safe for an active WAL database.
+            seed.prepare('VACUUM INTO ?').run(temporary);
+            fs.renameSync(temporary, paths.database);
+            seeded = true;
+            log(`TextMap versions: reused validated history state (${prefix.length} snapshots).`);
+        } finally {
+            seed.close();
+            if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+        }
+    }
     const db = new DatabaseSync(paths.database);
     try {
         initialize(db);
-        const identity = JSON.stringify({ schema: SCHEMA, root, languages: VERSION_LANGUAGES });
-        if (db.prepare('SELECT value FROM metadata WHERE key=?').get('identity')?.value !== identity) {
+        const identity = JSON.stringify({ schema: SCHEMA, root, languages: VERSION_LANGUAGES, ...(config.textmap_history_ref ? { scope: 'ordered-first-parent' } : {}) });
+        if (seeded) db.prepare('INSERT OR REPLACE INTO metadata VALUES (?,?)').run('identity', identity);
+        else if (db.prepare('SELECT value FROM metadata WHERE key=?').get('identity')?.value !== identity) {
             db.exec('DELETE FROM entries; DELETE FROM paths; DELETE FROM state; DELETE FROM counts; DELETE FROM staging; DELETE FROM affected; DELETE FROM deltas; DELETE FROM metadata;');
             db.prepare('INSERT INTO metadata VALUES (?,?)').run('identity', identity);
         }
@@ -280,12 +306,14 @@ async function build(config, log = console.log) {
             fs.writeSync(fd, '\n}\n');
         } finally { fs.closeSync(fd); }
         fs.renameSync(temporary, paths.index);
-        fs.writeFileSync(paths.manifest, JSON.stringify({ fingerprint, languages: VERSION_LANGUAGES, snapshots: snapshots.length, hashes: count, rule: 'latest-multilingual-content-count-change', sourceHead: head }, null, 2));
+        fs.writeFileSync(paths.manifest, JSON.stringify({ fingerprint, languages: VERSION_LANGUAGES, snapshots: snapshots.length, hashes: count,
+            firstVersion: normalizeVersion(snapshots[0].version), lastVersion: normalizeVersion(snapshots.at(-1).version),
+            historyRefs: config.textmap_history_ref || null, rule: 'latest-multilingual-content-count-change', sourceHead: head }, null, 2));
         log(`TextMap versions: recorded ${count} hashes.`);
         return paths.index;
     } finally { db.close(); }
 }
 
-module.exports = { LANGUAGES, VERSION_LANGUAGES, versionOf, normalizeVersion, compareVersions, textPath, selectPaths, token, parseEntry, initialize, applyCounts, applySnapshot, cachePaths, build };
+module.exports = { LANGUAGES, VERSION_LANGUAGES, history, versionOf, normalizeVersion, compareVersions, textPath, selectPaths, token, parseEntry, initialize, applyCounts, applySnapshot, cachePaths, build };
 
 if (require.main === module) build(require('../config.json')).catch(error => { console.error(error.stack); process.exitCode = 1; });

@@ -1,37 +1,13 @@
 // Source extraction belongs here; wiki-data consumes the exported genshin-db records.
 const { archive_image, source_excel, source_text, make_archive_item, archive_export } = require('./archiveSource');
 const { resourceIcon } = require('../../resources/miliastra');
+const { resolveMiliastraFields } = require('./fields');
 const tables = {
     costume: 'BeyondCostumeExcelConfigData',
     suit: 'BeyondCostumeSuitExcelConfigData',
     catalog: 'BeyondCostumeDrawingExcelConfigData',
     lore: 'LoadingTipsExcelConfigData',
     hall: 'BeyondHallExcelConfigData',
-};
-// Explicit mappings for this source revision, checked against independent anchors below.
-// FKLBIDGKEJK is a preset outfit, NOT the complete membership of a suit.
-const fields = {
-    costume_icon: 'MPFOEFGJKAE',
-    suit_extra_image: 'OLKBFAJMKNF',
-    catalog_id: 'FHIDKAKGMFN',
-    catalog_targets: 'BABILFMJJME',
-    hall_id: 'OANKFNDIFGE',
-    hall_name: 'NOBNAHLBFEG',
-    hall_description: 'HOCAJGPPDII',
-    hall_archive: 'MFPAIDPNDCG',
-    hall_image: 'KEFEGFKMPAP',
-    hall_preview: 'HPJNFBOHCKD',
-    body_types: 'JKOKOGCFAKF',
-    colors: 'AAFJPEDPGJE',
-    quality: 'NGHBBIBFLBC',
-    slot_groups: 'NIHIONHKJFH',
-    slots: 'NIGAGANHPHI',
-    slot_category: 'LOPKMKDOKMM',
-    color_name: 'GLOCLKABHBC',
-    costume_variant_group: 'CMEFDJHHIAI',
-    costume_source: 'NMJEHOJJBGC',
-    suit_variant_group: 'BONBCELOAFJ',
-    suit_source: 'AENKJPHOPNO',
 };
 function source_id(value, context) {
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
@@ -83,6 +59,7 @@ function relate(from, to, role) {
     from.data.relations.push({ category: 'miliastra', id: to.id, name: to.data.name, role });
 }
 function get_miliastra_export(lang) {
+    const fields = resolveMiliastraFields(source_excel);
     const costumes = index_rows(source_excel(tables.costume), 'costumeId', tables.costume);
     const suits = index_rows(source_excel(tables.suit), 'suitId', tables.suit);
     const catalogs = index_rows(source_excel(tables.catalog), fields.catalog_id, tables.catalog);
@@ -91,34 +68,24 @@ function get_miliastra_export(lang) {
     const ui_entries = index_rows(source_excel('BeyondCostumeUIEntryExcelConfigData'), 'configID', 'BeyondCostumeUIEntryExcelConfigData');
     const ui_slots = index_rows(source_excel('BeyondCostumeUISlotEntryExcelConfigData'), 'configID', 'BeyondCostumeUISlotEntryExcelConfigData');
     const slot_names = new Map([...ui_slots.values()].filter(row => row.slotType).map(row => [row.slotType, row]));
-    const color_names = new Map(source_excel('BydCostumeColorTagExcelConfigData').map(row => [row[fields.colors], row]));
+    const color_names = new Map(source_excel('BydCostumeColorTagExcelConfigData').map(row => [row[fields.color_tag], row]));
     const manual = new Map(source_excel('ManualTextMapConfigData').map(row => [row.textMapId, row]));
     anchor(costumes, 260001, { nameTextMapHash: 2098177674, descriptionTextMapHash: 33590983 }, tables.costume);
     anchor(costumes, 500101, { suitId: 265001 }, tables.costume);
-    anchor(costumes, 260001, { JKOKOGCFAKF: ['BODY_GIRL'], AAFJPEDPGJE: ['White'],
-        NIHIONHKJFH: [{ NIGAGANHPHI: ['UpperCloth'] }, {}], NGHBBIBFLBC: 'Green' }, tables.costume);
-    anchor(costumes, 504601, { CMEFDJHHIAI: 504401, suitId: 265046 }, tables.costume);
-    anchor(costumes, 1501401, { NMJEHOJJBGC: 501401, suitId: 1265014 }, tables.costume);
+    anchor(costumes, 504601, { suitId: 265046 }, tables.costume);
+    anchor(costumes, 1501401, { suitId: 1265014 }, tables.costume);
     anchor(suits, 265001, { nameTextMapHash: 2405268140, descriptionTextMapHash: 1780222704 }, tables.suit);
-    anchor(suits, 265046, { BONBCELOAFJ: 265044 }, tables.suit);
-    anchor(suits, 1265014, { AENKJPHOPNO: 265014 }, tables.suit);
     anchor(ui_entries, 1, { nameTextMapHash: 1229270749 }, 'BeyondCostumeUIEntryExcelConfigData');
     anchor(ui_entries, 2, { nameTextMapHash: 1555233741 }, 'BeyondCostumeUIEntryExcelConfigData');
-    anchor(ui_slots, 1, { nameTextMapHash: 1529563972, LOPKMKDOKMM: 'Costume' }, 'BeyondCostumeUISlotEntryExcelConfigData');
-    anchor(ui_slots, 2, { slotType: 'UpperCloth', nameTextMapHash: 2093996, LOPKMKDOKMM: 'Costume' }, 'BeyondCostumeUISlotEntryExcelConfigData');
-    anchor(ui_slots, 16, { slotType: 'Hairstyle', nameTextMapHash: 2235062916, LOPKMKDOKMM: 'Appearance' }, 'BeyondCostumeUISlotEntryExcelConfigData');
+    anchor(ui_slots, 1, { nameTextMapHash: 1529563972, [fields.slot_category]: 'Costume' }, 'BeyondCostumeUISlotEntryExcelConfigData');
+    anchor(ui_slots, 2, { slotType: 'UpperCloth', nameTextMapHash: 2093996 }, 'BeyondCostumeUISlotEntryExcelConfigData');
+    anchor(ui_slots, 16, { slotType: 'Hairstyle', nameTextMapHash: 2235062916 }, 'BeyondCostumeUISlotEntryExcelConfigData');
     if (color_names.get('White')?.[fields.color_name] !== 4150001616
         || manual.get('UI_BEYOND_GH_PREVIEW_GIRL_TAB')?.textMapContentTextMapHash !== 609493285
         || manual.get('UI_BEYOND_GH_PREVIEW_BOY_TAB')?.textMapContentTextMapHash !== 3827955177
         || manual.get('UI_BEYOND_COSTUME_GREEN')?.textMapContentTextMapHash !== 17359971) {
         throw new Error('Miliastra classification text anchors changed');
     }
-    anchor(catalogs, 270001, { BABILFMJJME: [260001], nameTextMapHash: 2308662065 }, tables.catalog);
-    anchor(halls, 1, {
-        NOBNAHLBFEG: 1209932345, HOCAJGPPDII: 3795565332,
-        MFPAIDPNDCG: 'BeyondHallArchive_1', KEFEGFKMPAP: 'UI_Beyd_HallThemeImg_Mnjc',
-        HPJNFBOHCKD: 'UI_Beyd_HallThemePic_Mnjc',
-    }, tables.hall);
     anchor(tips, 1928, { stageID: '91', tipsTitleTextMapHash: 1999678687, tipsDescTextMapHash: 3996501198 }, tables.lore);
     if (resource_hash(costumes.get(260002)?.[fields.costume_icon], 'costume:260002') !== '14425841620430768778'
         || resource_hash(suits.get(265001)?.iconHash, 'suit:265001') !== '2417760002026327459'
@@ -241,29 +208,29 @@ function get_miliastra_export(lang) {
         for (const [id, row] of rows) {
             const file = by_id.get(`${type}-${id}`);
             if (type === 'costume') file.data.classifications = [];
-            if (row[fields.quality] === undefined)
-                diagnose(file.data, `absent_classification:${fields.quality}`);
+            if (row[fields.quality[type]] === undefined)
+                diagnose(file.data, `absent_classification:${fields.quality[type]}`);
             else {
-                const key = qualities[row[fields.quality]];
+                const key = qualities[row[fields.quality[type]]];
                 if (key)
                     section(file, 'quality', manual_hash(file, key));
                 else
-                    diagnose(file.data, `unresolved_classification:${fields.quality}:${row[fields.quality]}`);
+                    diagnose(file.data, `unresolved_classification:${fields.quality[type]}:${row[fields.quality[type]]}`);
             }
             // Catalogs have no body/color/slot fields of their own; their targets remain linked.
             if (type === 'catalog')
                 continue;
-            section(file, 'body_type', tags(file, row, fields.body_types).flatMap(body => {
+            section(file, 'body_type', tags(file, row, fields.body_types[type]).flatMap(body => {
                 if (bodies[body])
                     return manual_hash(file, bodies[body]);
-                diagnose(file.data, `unresolved_classification:${fields.body_types}:${body}`);
+                diagnose(file.data, `unresolved_classification:${fields.body_types[type]}:${body}`);
                 return [];
             }));
-            section(file, 'color', tags(file, row, fields.colors).flatMap(color => {
+            section(file, 'color', tags(file, row, fields.colors[type]).flatMap(color => {
                 const label = color_names.get(color);
                 if (label)
                     return [label[fields.color_name]];
-                diagnose(file.data, `unresolved_classification:${fields.colors}:${color}`);
+                diagnose(file.data, `unresolved_classification:${fields.colors[type]}:${color}`);
                 return [];
             }));
             const categories = new Set();
@@ -357,7 +324,7 @@ function get_miliastra_export(lang) {
                 diagnose(file.data, `missing_variant:${variant.field}:${target_id}`);
                 continue;
             }
-            if (JSON.stringify(row[fields.body_types]) !== JSON.stringify(target[fields.body_types])
+            if (JSON.stringify(row[fields.body_types[variant.type]]) !== JSON.stringify(target[fields.body_types[variant.type]])
                 || variant.group && target[variant.field] !== target_id
                 || variant.type === 'costume' && suits.get(row.suitId)?.[variant.suit_field] !== target.suitId) {
                 diagnose(file.data, `unclosed_variant:${variant.field}:${target_id}`);

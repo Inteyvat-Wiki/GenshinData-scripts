@@ -34,3 +34,21 @@ links and matches its already-extracted PNGs. No game Lua is executed here.
 
 Raw-source assertions live alongside these modules. Wiki-side checks must query
 genshin-db and must not read source tables or this repository's configuration.
+
+`fields.js` calibrates Miliastra, circular TCG portraits and Serenitea suite
+layouts using exact source witnesses through `extract/field-inference.js`.
+Miliastra classification keys are resolved separately per table; nested slot
+keys are calibrated from known slot lists. Extraction and resource preparation
+share the same costume-icon and portrait resolvers. No revision-key aliases or
+process-wide field caches are used. Empty resource tables are allowed; a
+nonempty table without its unique witnesses fails rather than falling back.
+
+Run `node --test extract/archives/fields.test.js resources/miliastra.test.js` for
+renaming, ambiguity, missing-witness and exact-hash tests. Run
+`node extract/archives/check_fields.js [RAW_DATA]` to verify calibration and
+arbitrary per-table renaming against a current source, without writing exports
+or requiring an asset cache. Catalogue checks compare current source-qualified
+membership, relationships and text instead of frozen revision totals. Referenced
+dialogues with no source body must remain absent and explicitly diagnosed.
+Miliastra's complete catalogue check still validates the native resource cache;
+a stale cache is a real blocker, not a reason to bypass its source hashes.

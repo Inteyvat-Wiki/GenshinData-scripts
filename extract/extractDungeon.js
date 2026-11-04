@@ -22,6 +22,10 @@ function collateDungeon(lang) {
         let data = {};
 
         data.id = obj.dungeonEntryId;
+        // Keep the legacy point ID for existing queries, but retain the complete
+        // entrance identity: point IDs can be reused by different scenes.
+        data.entryId = obj.id;
+        data.sceneId = obj.sceneId;
 
         if (xpoint[obj.sceneId] == undefined) {
             xpoint[obj.sceneId] = getBin(`Scene/Point/scene${obj.sceneId}_point`);

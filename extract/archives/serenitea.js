@@ -1,5 +1,6 @@
 // Source extraction belongs here; wiki-data consumes the exported genshin-db records.
 const { source_text, archive_image, archive_dialogue, source_excel, make_archive_item, archive_external_relation, source_bin, archive_export } = require('./archiveSource');
+const { resolveSereniteaLayoutField } = require('./fields');
 function diagnostic(item, message) {
     item.diagnostics ??= [];
     if (!item.diagnostics.includes(message))
@@ -118,6 +119,7 @@ function get_serenitea_export(lang) {
     const realm_rows = source_excel('HomeworldModuleExcelConfigData');
     const furniture_rows = source_excel('HomeWorldFurnitureExcelConfigData');
     const suite_rows = source_excel('FurnitureSuiteExcelConfigData');
+    const layout_field = suite_rows.length ? resolveSereniteaLayoutField(source_bin) : undefined;
     const companion_rows = source_excel('HomeWorldNPCExcelConfigData');
     const events = source_excel('HomeWorldEventExcelConfigData');
     const type_rows = new Map(source_excel('HomeWorldFurnitureTypeExcelConfigData').map(row => [row.typeID, row]));
@@ -197,12 +199,12 @@ function get_serenitea_export(lang) {
         image(item, file.id, row.mapIcon, 'map_icon');
         const layout_path = `HomeworldFurnitureSuit/${row.jsonName}.json`;
         const layout = source_bin(layout_path);
-        if (!Array.isArray(layout?.HHDPMDCFCPK))
+        if (!Array.isArray(layout?.[layout_field]))
             diagnostic(item, `missing_suite_layout:${layout_path}`);
         else {
             item.layout = [];
             const counts = new Map();
-            for (const component of layout.HHDPMDCFCPK) {
+            for (const component of layout[layout_field]) {
                 if (!component.furnitureID) {
                     diagnostic(item, `invalid_suite_component:${JSON.stringify(component)}`);
                     continue;

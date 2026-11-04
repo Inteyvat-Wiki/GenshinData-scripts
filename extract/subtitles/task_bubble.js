@@ -5,7 +5,7 @@ const { get_task_lua_placements } = require('./task_lua');
 const { has_dialog_content_field, text_map, get_dialog, get_task_narrations } = require('./task_narration');
 const { get_bubble_rule, has_conflicting_bubble_text, bubble_delay_fields, bubble_parameter, bubble_call_identity } = require('./lua_bubble_rules');
 const project = path.resolve(__dirname, '../..');
-const config = require('../../config.json');
+const config = require('../../runtime-config');
 const source = config.GenshinData_folder;
 let dialogs;
 let names;
