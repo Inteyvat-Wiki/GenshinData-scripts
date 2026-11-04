@@ -35,8 +35,10 @@ function getGroups() {
 	for (const file of fs.readdirSync(path.join(source, 'BinOutput/Talk/NpcGroup')).filter(file => file.endsWith('.json'))) {
 		const data = read(`BinOutput/Talk/NpcGroup/${file}`);
 		const id = data[npcKey];
-		if (!Object.hasOwn(index, id) || !npcById.get(id)?.isDaily || npcById.get(id)?.invisiable) continue;
-		if (groups.has(id)) throw new Error(`npcs: duplicate indexed NPC ${id}`);
+		// The free-talk index does not cover every group in newer source data.
+		// Validate the explicit NPC/Talk/initial-dialog links in collateNpc instead.
+		if (!npcById.get(id)?.isDaily || npcById.get(id)?.invisiable) continue;
+		if (groups.has(id)) throw new Error(`npcs: duplicate NPC group ${id}`);
 		groups.set(id, { id, resource: index[id], file: `BinOutput/Talk/NpcGroup/${file}`, talks: data[talksKey] || [] });
 	}
 	return groups;
@@ -188,7 +190,7 @@ function collateNpc(language, group) {
 		name: getNpcName(language, group.id) || getNpcName(getLanguage('CHS'), group.id),
 		...(title ? { title } : {}),
 		alias: `NPC ${group.id}`,
-		source: { group: group.file, resource: group.resource },
+		source: { group: group.file, ...(group.resource !== undefined ? { resource: group.resource } : {}) },
 		birthPoints: getBirthPoints().get(group.id) || [],
 		entryTalks,
 		talks,
