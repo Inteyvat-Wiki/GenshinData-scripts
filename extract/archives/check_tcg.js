@@ -20,7 +20,7 @@ const visible_roles = new Set(['TALK_ROLE_NPC', 'TALK_ROLE_MATE_AVATAR', 'TALK_R
     'TALK_ROLE_BLACK_SCREEN', 'TALK_ROLE_NEED_CLICK_BLACK_SCREEN',
     'TALK_ROLE_CONSEQUENT_BLACK_SCREEN', 'TALK_ROLE_CONSEQUENT_NEED_CLICK_BLACK_SCREEN']);
 const existing_npc_talks = new Set();
-const npcDirectory = path.join(require('../../config.json').genshin_output_folder, 'ChineseSimplified/npcs');
+const npcDirectory = path.join(require('../../runtime-config').genshin_output_folder, 'ChineseSimplified/npcs');
 if (fs.existsSync(npcDirectory))
     for (const filename of fs.readdirSync(npcDirectory)) {
         const npc = JSON.parse(fs.readFileSync(path.join(npcDirectory, filename), 'utf8'));

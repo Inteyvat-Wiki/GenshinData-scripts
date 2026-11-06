@@ -1,11 +1,11 @@
 # 快照数据提供接口
 
-`require('genshindata-scripts')` 现在只加载接口，不启动提取、不回溯历史，也不创建缓存。`npm start` 等旧入口暂时保留，现有 wiki-data 无需立即改动。
+`require('@inteyvat-wiki/genshin-data-scripts')` 只加载接口，不启动提取、不回溯历史，也不创建缓存。`sourceRoot` 必须显式传入，或通过 `GENSHIN_DATA_SOURCE`、显式选择的旧配置提供；不再回退当前目录或包内 `config.json`。`npm start` 等旧入口只在显式配置后使用。
 
 下面的 API 示例在异步函数中执行。
 
 ```js
-const data = require('genshindata-scripts');
+const data = require('@inteyvat-wiki/genshin-data-scripts');
 const snapshot = await data.prepare({
     sourceRoot: 'D:/genshin data',
     cacheRoot: 'D:/GenshinCache/data', // 可省略，默认用户缓存目录
@@ -40,7 +40,7 @@ for (const { key, data: record } of snapshot.entries('English', 'characters')) {
 
 默认包含版本推断，需要完整源 Git 历史。新入口将 `historyRefs` 中的引用在准备开始时解析为固定提交，按所列顺序拼接各自的 first-parent 序列，并对重叠提交去重。不会扫描无关分支及工具内部引用，也不按版本号猜测历史顺序。已有 3.3 特判保留，可通过 `versionOverrides` 指定覆盖。
 
-实际源仓库的老历史在 master，当前 HEAD 所在 main 只包含 6.7 之后的 7 个快照。因此仅使用 HEAD 并不完整。本地 config.json 已明确设置 `textmap_history_refs: ["refs/remotes/origin/master", "HEAD"]`，合计 81 个快照（1.x–7.1）。也可以在 prepare 中显式传入 `historyRefs`。该本地配置仅在 sourceRoot 与配置源目录相同时使用；其他源仓库默认只选 HEAD，应按实际历史布局配置，不能假定缺失历史会自动出现。
+已核验的本地源仓库老历史在 master，main 只包含 6.7 之后的快照，因此仅选 HEAD 不完整。请按实际历史布局显式传入 `historyRefs: ["refs/remotes/origin/master", "HEAD"]`，不要把示例引用当成适用于任何仓库的默认值。兼容旧配置时，设置 `GENSHIN_DATA_CONFIG` 为 JSON 文件路径；只有 sourceRoot 与该文件的 `GenshinData_folder` 匹配时，才复用 `textmap_history_refs`（或 `textmap_history_ref`）、`textmap_version_overrides`、`textmap_version_seed`，显式 API 参数优先。无此配置时只选 HEAD，不扫描其他分支或假定缺失历史会自动出现。
 
 `historySeedCache` 可以指定已有历史缓存目录。只有源目录、模式版本、语言和全部已处理历史前缀完全吻合时才复用；通过只读 SQLite 连接和 VACUUM INTO 一致性复制到新的缓存目录，原数据库不改写，也不只复制可能遗漏 WAL 的裸数据库文件。身份或历史不匹配则报错，不强行接续。
 
@@ -52,7 +52,7 @@ for (const { key, data: record } of snapshot.entries('English', 'characters')) {
 
 ## Lua 与资源解析输入
 
-任务字幕使用 `luaRoot` 或 `GENSHIN_LUA_PATH`，输入字节码内容哈希纳入计划。不会执行游戏 Lua，也不负责从资源包提取字节码。
+任务字幕使用 `luaRoot` 或 `GENSHIN_LUA_PATH`，也保留显式旧配置的 `Lua_folder`；否则查找 `<cacheRoot>/lua`。输入字节码内容哈希纳入计划。不会执行游戏 Lua，也不负责从资源包提取字节码。缺失目录或没有字节码会明确提示所需配置项和实际路径。
 
 千星奇域和头像框的外部资源映射可以通过以下配置传入：
 
@@ -64,14 +64,16 @@ resourceCaches: {
 }
 ```
 
-对应环境变量仍为 `MILIASTRA_RESOURCE_CACHE` 和 `PROFILE_FRAME_RESOURCE_CACHE`。开发目录中原有 `.cache` 路径仅作兼容回退；npm 包不携带这些资源映射。映射及其声明的来源文件都要通过哈希校验，旧映射不会因最终输出缓存命中而被默默接受。
+对应环境变量仍为 `MILIASTRA_RESOURCE_CACHE` 和 `PROFILE_FRAME_RESOURCE_CACHE`。默认在 `<cacheRoot>/resources/` 查找 `miliastra-resources.json`、`profile-frame-resources.json`；没有包内 `.cache` 回退，npm 包不携带资源输入。显式路径优先于环境变量。映射及其声明的来源文件都要通过哈希校验，旧映射不会因最终输出缓存命中而被默默接受。
 
-地图一级、二级地区范围只使用客户端资源缓存：`resourceCaches.worldAreas` / `MAP_WORLD_AREA_RESOURCE_CACHE` / CLI `--world-area-resources`，未指定时查找开发目录 `.cache/world-areas.json`。选择 `maps` 时必需通过该缓存校验；缺失、过期或客户端版本不受支持都会停止准备，不再回退到社区仓库的 `BinOutput/Scene/WorldArea`。显式打开已经生成的只读快照仍不需要客户端在线。资源准备见 `resources/README.md`。
+地图一级、二级地区范围只使用客户端资源缓存：`resourceCaches.worldAreas` / `MAP_WORLD_AREA_RESOURCE_CACHE` / CLI `--world-area-resources`，未指定时查找 `<cacheRoot>/resources/world-areas.json`。`maps` 同时要求 `resourceCaches.mapAreaConfigs`（`MAP_AREA_CONFIG_RESOURCE_CACHE`），默认 `<cacheRoot>/resources/map-area-configs.json`。缺失、过期或客户端版本不受支持都会停止准备，不回退社区 `BinOutput/Scene/WorldArea`。其余地图资源缓存只有显式提供路径或对应环境变量时才启用，不自动扫描资源。显式打开已生成快照不需要原始客户端在线。
+
+使用 `require('@inteyvat-wiki/genshin-data-scripts/resources').prepare(kind, plan)` 显式准备资源，并将返回的 `cachePath` 传入上述 `resourceCaches`。完整参数、输出与研究边界见 [资源 API](../resources/README.md)。资源工作目录可以独立于快照缓存；不需要向包目录复制文件。
 
 ## 当前边界
 
 - 保留旧导出命令的双目录输出作为过渡；只有新 prepare 接口保证完整数据由上游缓存独占维护。
-- 包名尚未更换为组织作用域，genshin-db 暂以本地 npm 依赖连接；不要直接执行继承的 npm 发布脚本。
+- 两个组织包版本均为 `0.1.0`，内部依赖使用精确 npm 版本，不使用相邻仓库或 `file:` 依赖。包仍为私有且发布禁用；本地验证不等于授权正式发布或完成许可核验。
 - 历史的分支拼接、种子迁移、增量和版本重算均有独立 Git/SQLite 测试；真实数据验证使用独立测试缓存，不覆盖正式输出。不要将仅从 6.7 起始的不完整历史当成完整历史。
 - 已完成真实历史验证：显式拼接得到 81 个快照、861,831 个哈希，迁移后 hashes.json 与原索引逐字节一致；268 条观景点对象版本与原表完全一致。原 SQLite 通过只读连接复制，正式数据目录未写入。
 - 现有源数据的部分数值/地区字段已有适配缺口。例如当前旧查询胡桃的数值计算已为 NaN；本轮不把新旧同为 NaN 当成数值正确性通过，另用独立数值夹具验证接口接线。

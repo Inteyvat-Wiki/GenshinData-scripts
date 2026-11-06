@@ -43,6 +43,17 @@ test('scene entry uses the external CAB and lossless PPtr, independent of scene/
 test('null map pointers do not infer a map from a resource name', () => {
     const [entry] = links(fixture({ nullMap: true })); assert.equal(entry.status, 'no-map-reference'); assert.equal(entry.config, undefined);
 });
+test('duplicate scene names are accepted only when all typed map targets have the same verified bytes', () => {
+    const x = fixture(), original = x.objects.values().next().value;
+    for (const o of x.objects.values()) o.source.sha256 = require('node:crypto').createHash('sha256').update(o.bytes).digest('hex');
+    const copy = structuredClone(original); copy.bytes = Buffer.from(copy.bytes); copy.entry.PathID = '2'; copy.metadata.entry.PathID = '2';
+    x.objects.set(`${copy.entry.Source}\0${0}\0${2}`, copy);
+    x.inventory.files[0].objects.push({ ...x.inventory.files[0].objects[0], PathID:'2' });
+    x.candidates.push(copy.entry);
+    assert.equal(links(x)[0].status, 'map-config'); assert.equal(links(x)[0].equivalentSceneSources.length, 2);
+    x.objects.delete(`${copy.entry.Source}\0${0}\0${2}`);
+    assert.equal(links(x)[0].status, 'ambiguous-scene-script');
+});
 test('wrong CAB and duplicate CAB cannot be resolved through the same PathID in another asset', () => {
     const missing = fixture(); missing.inventory.files[0].metadata.externals[0].fileName = 'wrong-cab';
     assert.equal(links(missing)[0].mapReference.status, 'missing-file');

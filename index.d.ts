@@ -1,8 +1,9 @@
 export interface PreparationOptions {
+    /** Required unless GENSHIN_DATA_SOURCE or an explicitly selected legacy config supplies it. */
     sourceRoot?: string;
     cacheRoot?: string;
     luaRoot?: string;
-    resourceCaches?: { miliastra?: string; profileFrames?: string; maps?: string; mapIcons?: string; worldAreas?: string; mapAreaConfigs?: string; mapBase?: string; mapFog?: string; levelTags?: string };
+    resourceCaches?: { miliastra?: string; profileFrames?: string; maps?: string; mapIcons?: string; worldAreas?: string; mapAreaConfigs?: string; mapBase?: string; mapFog?: string; mapEffects?: string; mapLimitOutlines?: string; levelTags?: string };
     folders: string[];
     languages?: string[];
     versions?: boolean;
@@ -26,3 +27,4 @@ export interface Snapshot {
 export function prepare(options: PreparationOptions): Promise<Snapshot>;
 export function openSnapshot(options?: { cacheRoot?: string; snapshotId?: string }): Snapshot;
 export function cacheDirectory(directory?: string): string;
+export * as resources from './resources';

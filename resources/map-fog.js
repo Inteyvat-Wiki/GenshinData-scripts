@@ -110,7 +110,7 @@ function readResourceCache(file) {
     assert.deepEqual(cache.scenes, buildCache(cache.plan).scenes); return cache;
 }
 /** Exact, bounded discovery from MonoLevelMap, followed by material PPtrs. */
-function prepare({ baseCacheFile, sceneIds, studio, map, output, timeoutMs = 240000 }) {
+function prepare({ game = 'GI', baseCacheFile, sceneIds, studio, map, output, dotnet, timeoutMs = 240000 }) {
     assert(Array.isArray(sceneIds) && sceneIds.length && sceneIds.every(Number.isSafeInteger));
     const base = require('./map-base').readResourceCache(baseCacheFile), prefab = read(base.plan.prefabCacheFile);
     const scenes = base.scenes.filter(s => sceneIds.includes(s.sceneId)); assert.equal(scenes.length, new Set(sceneIds).size);
@@ -119,9 +119,9 @@ function prepare({ baseCacheFile, sceneIds, studio, map, output, timeoutMs = 240
         const formats = fogMaterialFormats(fs.readFileSync(scene.controllerSource.file), scene.controller.unparsedOffset);
         return scene.controller.groups.flatMap(group => [formats.mask, formats.outline].map(format => format.replace('{0}', group.id)));
     });
-    const found = tools.readAssetMap({ studio, map, output: path.join(output, 'materials-map.json'), names, types: ['Material'], timeoutMs });
+    const found = tools.readAssetMap({ studio, map, output: path.join(output, 'materials-map.json'), names, types: ['Material'], dotnet, timeoutMs });
     assert.equal(found.entries.length, names.length, 'Incomplete fog material discovery');
-    const materials = tools.extractRawResources({ entries: found.entries, studio, game: 'GI', format: 'serialized', output: path.join(output, 'materials'), timeoutMs });
+    const materials = tools.extractRawResources({ entries: found.entries, studio, game, format: 'serialized', output: path.join(output, 'materials'), dotnet, timeoutMs });
     const decoded = materials.resources.map(o => ({ ...o, metadata: read(o.metadata.file), decoded: decodeObject(fs.readFileSync(o.file), read(o.metadata.file)) }));
     const inventories = prefab.inputs.filter(input => path.basename(input.file) === 'inventory.json').map(input => read(input.file));
     const shaders = new Map();
@@ -133,15 +133,15 @@ function prepare({ baseCacheFile, sceneIds, studio, map, output, timeoutMs = 240
         const unique = new Map(matches.map(entry => [identity(entry), entry])); assert.equal(unique.size, 1, 'Fog shader origin missing from verified inventories');
         for (const [key, entry] of unique) shaders.set(key, entry);
     }
-    tools.extractRawResources({ entries: [...shaders.values()], studio, game: 'GI', format: 'serialized', output: path.join(output, 'shaders'), timeoutMs });
+    tools.extractRawResources({ entries: [...shaders.values()], studio, game, format: 'serialized', output: path.join(output, 'shaders'), dotnet, timeoutMs });
     // The background material is already part of the base prefab's reference closure.
     const fogMaterials = prefab.objects.filter(o => o.entry.Type === 'Material' && o.decoded.name === 'Fog');
     const ids = [...new Set([...decoded.flatMap(o => o.decoded.textures.filter(t => ['_Mask', '_WarpMask'].includes(t.name)).map(t => t.texture.PathID)),
         ...fogMaterials.flatMap(o => o.decoded.textures.map(t => t.texture.PathID))].filter(id => id !== '0'))];
-    const textures = tools.readAssetMap({ studio, map, output: path.join(output, 'textures-map.json'), pathIDs: ids, types: ['Texture2D'], timeoutMs });
+    const textures = tools.readAssetMap({ studio, map, output: path.join(output, 'textures-map.json'), pathIDs: ids, types: ['Texture2D'], dotnet, timeoutMs });
     assert.equal(textures.entries.length, ids.length, 'Incomplete fog texture discovery');
-    tools.extractRawResources({ entries: textures.entries, studio, game: 'GI', format: 'serialized', output: path.join(output, 'textures'), timeoutMs });
-    tools.extractResources({ entries: textures.entries, studio, game: 'GI', selection: 'preserve', output: path.join(output, 'images'), timeoutMs });
+    tools.extractRawResources({ entries: textures.entries, studio, game, format: 'serialized', output: path.join(output, 'textures'), dotnet, timeoutMs });
+    tools.extractResources({ entries: textures.entries, studio, game, selection: 'preserve', output: path.join(output, 'images'), dotnet, timeoutMs });
     const plan = { baseCacheFile, materialReportFile: path.join(output, 'materials/extraction-report.json'), textureReportFile: path.join(output, 'textures/extraction-report.json'),
         imageReportFile: path.join(output, 'images/extraction-report.json'), shaderReportFile: path.join(output, 'shaders/extraction-report.json'), output: path.join(output, 'map-fog.json') };
     fs.writeFileSync(path.join(output, 'plan.json'), JSON.stringify(plan, null, 2) + '\n');

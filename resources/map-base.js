@@ -73,21 +73,21 @@ function readResourceCache(file) {
     const actual = buildCache(cache.plan);
     assert.deepEqual(cache.scenes, actual.scenes); assert.deepEqual(cache.tiles, actual.tiles); assert.deepEqual(cache.diagnostics, actual.diagnostics); return cache;
 }
-function prepare({ data, sceneTableFile, entryCacheFile, studio, map, output, timeoutMs = 180000, maxTiles = 2048 }) {
+function prepare({ game = 'GI', data, sceneTableFile, entryCacheFile, studio, map, output, dotnet, timeoutMs = 180000, maxTiles = 2048 }) {
     output = path.resolve(output); fs.mkdirSync(output);
-    entryCacheFile ||= require('./map-entries').prepare({ data, sceneTableFile, studio, map, output: path.join(output, 'entries'), timeoutMs }).file;
+    entryCacheFile ||= require('./map-entries').prepare({ data, sceneTableFile, studio, map, game, output: path.join(output, 'entries'), dotnet, timeoutMs }).file;
     const selected = selectBaseEntries(require('./map-entries').readResourceCache(entryCacheFile).entries, tilePrefixes);
     assert(selected.length, 'No supported native base maps');
     const prefabOutput = path.join(output, 'prefabs');
-    require('./map-atlas').prepareAtlas({ studio, assetMap: map, output: prefabOutput, prefabPaths: selected.map(entry => entry.config.prefabPath), maxObjects: 30000, maxSources: 80, timeoutMs });
+    require('./map-atlas').prepareAtlas({ studio, game, assetMap: map, output: prefabOutput, prefabPaths: selected.map(entry => entry.config.prefabPath), maxObjects: 30000, maxSources: 80, dotnet, timeoutMs });
     const textureMapFile = path.join(output, 'texture-map.json');
-    const textureMap = tools.readAssetMap({ studio, map, output: textureMapFile, types: ['Texture2D'], timeoutMs });
+    const textureMap = tools.readAssetMap({ studio, map, output: textureMapFile, types: ['Texture2D'], dotnet, timeoutMs });
     const tiles = textureMap.entries.filter(entry => selected.some(link => tileCoordinate(entry.Name, link.tilePrefix)));
     assert(tiles.length > 0 && tiles.length <= maxTiles, 'Base tile selection exceeds expected bounds');
     assert.equal(new Set(tiles.map(entry => entry.Name)).size, tiles.length, 'Ambiguous base tile asset names');
     const rawOutput = path.join(output, 'serialized'), imageOutput = path.join(output, 'images');
-    tools.extractRawResources({ entries: tiles, studio, output: rawOutput, game: 'GI', format: 'serialized', inputs: [textureMapFile, map], timeoutMs });
-    tools.extractResources({ entries: tiles, studio, output: imageOutput, game: 'GI', selection: 'preserve', inputs: [textureMapFile, map], timeoutMs });
+    tools.extractRawResources({ entries: tiles, studio, output: rawOutput, game, format: 'serialized', inputs: [textureMapFile, map], dotnet, timeoutMs });
+    tools.extractResources({ entries: tiles, studio, output: imageOutput, game, selection: 'preserve', inputs: [textureMapFile, map], dotnet, timeoutMs });
     const file = path.join(output, 'map-base.json'), cache = buildCache({ entryCacheFile, prefabCacheFile: path.join(prefabOutput, 'map-resources.json'),
         rawReportFile: path.join(rawOutput, 'extraction-report.json'), imageReportFile: path.join(imageOutput, 'extraction-report.json'), output: file });
     return { file, scenes: cache.scenes.length, tiles: cache.tiles.length };

@@ -38,7 +38,7 @@ function decodeLevelMap(bytes) {
 const families = {
     BigWorldMap: 'UI_MapBack', MapAbyssalPalace: 'UI_MapBack_AbyssalPalace', MapTheChasm: 'UI_MapBack_TheChasm',
     MapDeepSea: 'UI_MapBack_DeepSea', MapVolcano: 'UI_Map_Volcano', MapFairybook: 'UI_Map_Fairybook', MapFirmament: 'UI_Map_Firmament',
-    MapDreamIsland: 'UI_Map_DreamIsland', MapMoonCanon: 'UI_Map_MoonCanon',
+    MapDreamIsland: 'UI_Map_DreamIsland', MapPenumbra: 'UI_Map_Penumbra', MapMoonCanon: 'UI_Map_MoonCanon',
 };
 function tileCoordinate(name, prefix) {
     const match = new RegExp(`^${prefix}_(-?\\d+)_(-?\\d+)(?:_GenerateMipMaps)?$`).exec(name);

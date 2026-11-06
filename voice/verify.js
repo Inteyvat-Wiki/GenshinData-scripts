@@ -1,5 +1,5 @@
 const fs = require('fs');
-const config = require('../config.json');
+const config = require('../runtime-config');
 
 checkVO('./db-vo.txt');
 function checkVO(path) {

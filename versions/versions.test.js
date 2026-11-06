@@ -182,7 +182,7 @@ test('normal exports replace stale versions; enrichers preserve and minimize', (
 });
 
 test('exportData writes compatible version maps and version-only mode leaves bodies unchanged', {
-    skip: !fs.existsSync(path.join(require('../config.json').GenshinData_folder, 'TextMap')),
+    skip: process.env.GENSHIN_DATA_INTEGRATION_TESTS !== '1',
 }, () => {
     const { exportData, exportCurve } = require('../extract/global');
     const originalConfig = global.config;
@@ -219,10 +219,9 @@ test('exportData writes compatible version maps and version-only mode leaves bod
 });
 
 test('domain enrichment resolves enemy hashes from source, not exported enemy fields', {
-    skip: !fs.existsSync(path.join(require('../config.json').genshin_export_folder, 'EN', 'enemies.json')) ||
-        !fs.existsSync(path.join(require('../config.json').genshin_export_folder, 'CHS', 'domains.json')),
+    skip: process.env.GENSHIN_DATA_INTEGRATION_TESTS !== '1',
 }, () => {
-    const config = require('../config.json');
+    const config = require('../runtime-config');
     const enemies = JSON.parse(fs.readFileSync(path.join(config.genshin_export_folder, 'EN', 'enemies.json')));
     assert.ok(Object.values(enemies).some(enemy => enemy.nameTextMapHash === undefined));
     const data = tracking.collate(require('../extract/extractDomainMonsterList'), 'CHS');

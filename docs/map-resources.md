@@ -2,6 +2,32 @@
 
 资源提取由 `@inteyvat-wiki/resource-tools` 完成；本仓库的 `resources/maps.js` 解释地图对象字段及引用，完整记录仍由快照缓存维护。wiki-data 不能调用这里的二进制解析器或自行读取游戏包。
 
+## 独立场景原生边界（2026-11-05）
+
+琉形蜃境 `scene-10` 的 `Penumbra_LevelStreaming → MapPenumbra` 引用已核验。
+`UI_Map_Penumbra_{x}_{z}` 的九张 2048×2048 切片与控制器的 `[-1,1] × [-1,1]` 网格一致；
+每格对应 1024 游戏坐标单位，使用既有独立场景投影。四个地名来自预制体中的原生文本键。
+外围遮挡沿用已验证的材质解析：500 组有效，501–503 组为零面积。
+限制区 101002–101004 的 MapBack 是覆盖图，未当作红边；没有从区域多边形补画边界。
+`cache/enrich-map-base.js` 可向指定快照添加经完整来源校验的底图，再由既有地名和效果补充入口添加其余记录。
+
+`resources.prepare('mapEffects', plan)` 将已提取的资源解析成 `native-boundary` 和 `outside-fog` 记录。
+计划需显式提供 `prefabCacheFile`、`entryCacheFile`、`outlineCacheFile`、`artIndexReportFile`、`sceneIds` 和新的输出 JSON 文件 `output`。
+通过 `resourceCaches.mapEffects`、`--map-effects` 或 `MAP_EFFECT_RESOURCE_CACHE` 接入正常地图提取。
+已有快照可用 `cache/enrich-map-effects.js CACHE SNAPSHOT RESOURCE` 增补；其他记录保持不变。
+
+场景根对象由 SceneScriptData → MapScriptData 的真实引用及完整美术资源键确定；同名入口只有在全部引用都指向字节相同、脚本类型正确的地图配置时才合并。
+红边由 LimitRegion 的 MapBack 地址确定预制体，从中读取 Sprite、材质、组件颜色、祖先变换及 GuideArea 缩放。
+拉伸矩形先根据父矩形解析实际宽高；不拿 SimplePolygon 轮廓充当原生红边。普通 alpha 和加法混合分别保留，未验证的 shader 拒绝输出。
+wiki-data 显式转换贴图部件，烘焙 RGB tint、保留原始 alpha 和组件透明度，输出普通覆盖图；前端不接收 Unity 字段。
+
+外围遮挡从 MonoLevelMap 的分组引用及材质路径格式定位，按完整资源键和真实 PPtr 校验纹理。
+Stencil 与本场景背景材质一致即可，不再固定为 129。分组名不要求与 GameObject 名相同；零面积变换不参与合并。
+展示继续使用原生灰度遮罩 0.5 等值线的并集、纯黑背景和青绿色边缘，属于全部区域开放的静态预览。
+
+7.2 本地验证覆盖 8 个独立场景，得到 7 组红边和 7 组外围遮挡。金苹果群岛控制器的外围分组引用为空，未补画外围；希穆兰卡所查 MapBack 是底图替换图，未当作红边。霜月 910 组变换为零面积，已排除。
+配置文件中的材质开放值、动画和当前玩家进度不作为这些静态边界的显示条件。
+
 ## 地表及独立场景文字（2026-11-03）
 
 `extract/maps/surface-labels.js` 解析 `MonoLevelMapNames` 的两组坐标列表，并接入底图 prefab 的 `MonoLocalizedText`。正常 `collateMaps` 使用已验证的 `MAP_BASE_RESOURCE_CACHE` 及其 prefab 缓存，无新增提取参数。场景由底图控制器的 GameObject 引用确定；静态文字沿已解析祖先引用查找根对象，不按同名 prefab 猜配。
@@ -39,7 +65,7 @@ CAB `15f0bf31e3f2f6ad8b15ad857995dba4`，PathID 分别为 `-6884423950281524040`
   "data": "D:/genshin data",
   "studio": "C:/Apps/AnimeStudio",
   "assetMap": "C:/Apps/AnimeStudio/Maps/genshin_7.1.map",
-  "output": "D:/GenshinData-scripts/.cache/maps-native-new",
+  "output": "D:/GenshinCache/resources/maps-native-new",
   "extractImages": true,
   "maxObjects": 20000,
   "maxSources": 64,
@@ -184,8 +210,15 @@ Outline 的值为 `pow(saturate(r * _OpenAreaLerp), _OulineFadeRange)`，高于 
 有界提取；只提供计划文件时从已有报告重新构建。缓存通过 `--map-fog-resources` / `MAP_FOG_RESOURCE_CACHE`
 接入地图解析，输出 `resource/outside-fog`。wiki-data 显式转换成普通地图覆盖图，Wiki 不接收 Unity 字段。
 
-当前只接入大世界的静态全开放预览（`_OpenAreaLerp=1`、time=0）。材质中保存的开放值有 0/1 两种，
-不能将其当作当前玩家状态；64 组全部开放是 Wiki 的预览选择，不是从任务完成状态推断出的结论。
+### 限制区轮廓
+
+`resources.prepare('mapLimitOutlines', { sourceRoot, studio, map, output })` 从限制区表的每个资源名生成 SimplePolygons 和 MapBack 的完整资源键。设计索引确定几何所在的块与包内偏移，再以对象清单确定 PathID。美术索引命中时附上预制体地址及包位置。同名资源仍按完整键定位。当前解码配置已核验 7.2 客户端的基础包和热更新包。
+
+已有资源清单时可传 `mapFile`，也可用 `indexReportFile`、`artIndexReportFile` 指定当前客户端的两个索引提取报告。若同时给出 `rawReportFile`，则直接校验并解析已提取的二进制。将结果传给 `resourceCaches.mapLimitOutlines` 或 `--map-limit-outlines`，限制区记录的 `data.polygons` 即包含原始顺序的顶点、极值和来源。场景 ID 缺失时保留空关联。Wiki 的固定边界由场景导出目录选择，预制体命中只提供美术定位依据。
+
+外围遮挡采用静态全开放预览（`_OpenAreaLerp=1`、time=0），独立场景的接入见本文开头。
+材质中保存的开放值有 0/1 两种，不能将其当作当前玩家状态；大世界 64 组全部开放是 Wiki 的预览选择，
+不是从任务完成状态推断出的结论。
 动画、相机相关噪声/视差、mip 选择、色彩空间及开启过程仍不承诺逐像素一致。
 固定采样分辨率只影响导出清晰度，不决定遮挡轮廓或扩边距离。没有使用旧人工图形、裁剪和距离参数。
 

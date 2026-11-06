@@ -1,7 +1,7 @@
-# GenshinData-scripts
+# @inteyvat-wiki/genshin-data-scripts
 Node scripts to extract data from ExcelBinOutput, independently maintained by Inteyvat-Wiki.
 
-维护检查：`npm run test:unit` 使用合成夹具，不需要游戏输入；`npm run test:misc` 则针对配置的实际源数据和资源缓存。跨仓库打包、独立安装、缓存准备和查询回归由 wiki-data 的 `npm run check:packages` 负责。资源运行模块按 `resources/*.js` 纳入包和缓存代码指纹，新增模块无需再维护另一份文件列表。包在更名及发布设计完成前保持 `private: true`，不影响本地打包。
+维护检查：`npm run test:unit` 使用合成夹具，不需要游戏输入；`npm run test:misc` 则针对显式配置的实际源数据和资源缓存。跨仓库打包、独立安装、缓存准备和查询回归由 wiki-data 的 `npm run check:packages` 负责。资源运行模块按 `resources/*.js` 纳入包和缓存代码指纹。包名为 `@inteyvat-wiki/genshin-data-scripts@0.1.0`，精确依赖 `@inteyvat-wiki/resource-tools@0.1.0`；不依赖相邻仓库。当前没有授权发布：保留 `private: true` 和发布禁用脚本，仍可本地打包。更名不改变许可核验状态或授权范围。
 
 混淆字段在本仓库解析：使用 `extract/field-inference.js`，按已核验条目的 ID、文本哈希、资源名或引用值校准当前字段名，不维护版本专属的混淆键别名表。一个样本无法消歧时增加独立样本，取候选字段的交集；校准样本缺失、匹配缺失或不唯一都应报错。字段映射只在当前输入内复用，不能跨源数据缓存。单元测试应覆盖任意键名重命名、行序变化及缺失/歧义情况。原始类型标记和二进制格式标记不等同于属性键，不能仅因形态相似就推断含义。
 
@@ -17,7 +17,17 @@ Node scripts to extract data from ExcelBinOutput, independently maintained by In
 
 新的 npm 数据提供入口与缓存规则见 [快照接口](docs/cache-provider.md)。导入包不会自动提取；请显式调用 `prepare()`。以下是暂时保留的旧命令用法。
 
-For personal use, edit the `config.json` file. The folder pointed by `GenshinData_folder` must include `ExcelBinOutput`, `TextMap`, and `Readable`.
+Pass `sourceRoot` to `prepare()` (or set `GENSHIN_DATA_SOURCE`). There is no source
+checkout/CWD fallback. The folder must include `ExcelBinOutput`, `TextMap`, and
+`Readable` as required by the selected extractors. Outputs, resource lookups,
+Lua inputs and history caches default to the OS user cache, not the package tree.
+The stable resource preparation API is documented in [resources](resources/README.md).
+
+Legacy commands require an explicit `GENSHIN_DATA_CONFIG` path to a JSON file
+with `GenshinData_folder` and any legacy output/history settings. The repository's
+old `config.json` is never loaded automatically and is not included in the npm
+package. `GENSHIN_DATA_RUNTIME_CONFIG` remains an explicit JSON override for
+isolated extraction processes. No extraction runs during npm installation.
 
 Exports automatically infer object versions from multilingual TextMap history before extraction. See [TextMap version rules and cache](versions/README.md).
 

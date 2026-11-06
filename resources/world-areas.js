@@ -106,21 +106,21 @@ function readResourceCache(file) {
     }
     return cache;
 }
-function prepare({ sourceRoot, studio, map: mapInput, assetMap, output, game = 'GI', timeoutMs = 120000 }) {
+function prepare({ sourceRoot, studio, map: mapInput, assetMap, output, game = 'GI', dotnet, timeoutMs = 120000 }) {
     assert(sourceRoot && studio && (mapInput || assetMap) && output, 'Specify sourceRoot, studio, map/assetMap and a new output directory');
     fs.mkdirSync(output);
     const mapFile = assetMap || path.join(output, 'asset-map.json');
-    const map = assetMap ? read(assetMap) : tools.readAssetMap({ studio, map: mapInput, output: mapFile, types: ['MiHoYoBinData'], timeoutMs });
+    const map = assetMap ? read(assetMap) : tools.readAssetMap({ studio, map: mapInput, output: mapFile, types: ['MiHoYoBinData'], dotnet, timeoutMs });
     verify({ file: map.map, sha256: map.sha256 });
     const indices = map.entries.filter(entry => entry.Type === 'MiHoYoBinData' && path.basename(entry.Source) === '31049741.blk'
         && entry.PathID === '3' && entry.Offset === 0 && entry.Name === '0000006f');
     assert.equal(indices.length, 1, 'Ambiguous/missing client design index');
     const indexOutput = path.join(output, 'design-index');
-    const indexReport = tools.extractRawResources({ entries: indices, studio, game, output: indexOutput, format: 'payload', inputs: [mapFile, map.map], timeoutMs });
+    const indexReport = tools.extractRawResources({ entries: indices, studio, game, output: indexOutput, format: 'payload', inputs: [mapFile, map.map], dotnet, timeoutMs });
     const tableFile = path.join(sourceRoot, 'ExcelBinOutput/WorldAreaConfigData.json');
     const selected = selectResources(read(tableFile), fs.readFileSync(indexReport.resources[0].file), map.entries);
     const rawOutput = path.join(output, 'payloads');
-    tools.extractRawResources({ entries: selected.map(item => item.entry), studio, game, output: rawOutput, format: 'payload', inputs: [mapFile, tableFile], timeoutMs });
+    tools.extractRawResources({ entries: selected.map(item => item.entry), studio, game, output: rawOutput, format: 'payload', inputs: [mapFile, tableFile], dotnet, timeoutMs });
     const file = path.join(output, 'world-areas.json');
     const cache = buildCache({ sourceRoot, mapFile, indexReportFile: path.join(indexOutput, 'extraction-report.json'),
         rawReportFile: path.join(rawOutput, 'extraction-report.json'), output: file });

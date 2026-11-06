@@ -26,10 +26,18 @@ function linkEntries(rows, candidates, source) {
         return header;
     }
     const origin = object => ({ ...object.entry, ...object.source });
-    return sceneGroups(rows).map(group => {
+    function link(group, matches) {
         const result = { ...group };
         if (!group.scriptData) return { ...result, status: 'missing-script-data' };
-        const matches = candidates.filter(e => e.Name === group.scriptData);
+        if (matches.length > 1) {
+            const alternatives = matches.map(candidate => link(group, [candidate]));
+            // A name collision never picks a winner. Multiple scene configurations
+            // may still prove the same map when every typed reference agrees.
+            if (typeof alternatives[0].mapSource?.sha256 === 'string' && alternatives.every(entry => entry.status === 'map-config'
+                && entry.mapSource.sha256 === alternatives[0].mapSource.sha256
+                && JSON.stringify(entry.config) === JSON.stringify(alternatives[0].config)))
+                return { ...alternatives[0], equivalentSceneSources: alternatives.map(entry => entry.sceneSource) };
+        }
         if (matches.length !== 1) return { ...result, status: matches.length ? 'ambiguous-scene-script' : 'missing-scene-script', candidates: matches };
         const object = source.objects.get(key(matches[0]));
         if (!object) return { ...result, status: 'missing-scene-bytes', candidate: matches[0] };
@@ -47,7 +55,8 @@ function linkEntries(rows, candidates, source) {
             result.config = decodeMapScript(map.bytes); result.mapSource = origin(map);
             return { ...result, status: 'map-config' };
         } catch (error) { return { ...result, status: 'unsupported-entry', detail: error.message }; }
-    });
+    }
+    return sceneGroups(rows).map(group => link(group, candidates.filter(e => e.Name === group.scriptData)));
 }
 
 function buildCache({ sceneTableFile, sceneMapFile, reportFiles, inventoryFiles, output }) {
@@ -68,15 +77,17 @@ function readResourceCache(file) {
     assert.deepEqual(cache.entries, buildCache(cache.plan).entries); return cache;
 }
 
-function prepare({ data, sceneTableFile = path.join(data || '.', 'ExcelBinOutput/SceneExcelConfigData.json'), studio, map,
-    output, maxSources = 32, maxObjects = 3000, timeoutMs = 180000 }) {
+function prepare({ game = 'GI', data, sceneTableFile, studio, map,
+    output, maxSources = 32, maxObjects = 3000, dotnet, timeoutMs = 180000 }) {
+    assert(data || sceneTableFile, 'Specify data (sourceRoot) or sceneTableFile explicitly');
+    sceneTableFile ||= path.join(data, 'ExcelBinOutput/SceneExcelConfigData.json');
     const groups = sceneGroups(read(sceneTableFile));
     output = path.resolve(output); fs.mkdirSync(output);
     const sceneMapFile = path.join(output, 'scene-map.json');
     const candidates = tools.readAssetMap({ studio, map, output: sceneMapFile, types: ['MonoBehaviour'],
-        names: groups.map(g => g.scriptData).filter(Boolean), timeoutMs });
+        names: groups.map(g => g.scriptData).filter(Boolean), dotnet, timeoutMs });
     const roots = groups.flatMap(g => {
-        const found = candidates.entries.filter(e => e.Name === g.scriptData); return found.length === 1 ? found : [];
+        return candidates.entries.filter(e => e.Name === g.scriptData);
     });
     assert(roots.length, 'No unique SceneScriptData candidates');
     const inventoryFiles = [], reportFiles = [], inspected = new Set(), extracted = new Set();
@@ -85,7 +96,7 @@ function prepare({ data, sceneTableFile = path.join(data || '.', 'ExcelBinOutput
         const pending = [...new Set(sources)].filter(s => !inspected.has(s)); if (!pending.length) return;
         assert(inspected.size + pending.length <= maxSources, 'Scene-map source limit exceeded');
         const directory = path.join(output, `inventory-${inventoryFiles.length}`);
-        const result = tools.inspectResourceFiles({ sources: pending, studio, game: 'GI', output: directory, timeoutMs });
+        const result = tools.inspectResourceFiles({ sources: pending, studio, game, output: directory, dotnet, timeoutMs });
         inventory.files.push(...result.inventory.files); inventoryFiles.push(path.join(directory, 'inspection-report.json'));
         pending.forEach(s => inspected.add(s));
     }
@@ -94,7 +105,7 @@ function prepare({ data, sceneTableFile = path.join(data || '.', 'ExcelBinOutput
         if (!unique.length) return;
         assert(extracted.size + unique.length <= maxObjects, 'Scene-map object limit exceeded');
         const directory = path.join(output, `objects-${reportFiles.length}`);
-        tools.extractRawResources({ entries: unique, studio, game: 'GI', output: directory, format: 'serialized', timeoutMs,
+        tools.extractRawResources({ entries: unique, studio, game, output: directory, format: 'serialized', dotnet, timeoutMs,
             inputs: [sceneTableFile, sceneMapFile, map] });
         reportFiles.push(path.join(directory, 'extraction-report.json')); unique.forEach(e => extracted.add(key(e)));
         source = maps.loadSources(reportFiles, inventoryFiles);
@@ -108,7 +119,7 @@ function prepare({ data, sceneTableFile = path.join(data || '.', 'ExcelBinOutput
         const ids = refs.filter((_, i) => resolved[i].status === 'missing-file').map(r => r.pointer.PathID);
         if (ids.length) {
             const found = tools.readAssetMap({ studio, map, output: path.join(output, `reference-candidates-${lookup++}.json`),
-                pathIDs: [...new Set(ids)], types: ['MonoBehaviour', 'MonoScript'], timeoutMs });
+                pathIDs: [...new Set(ids)], types: ['MonoBehaviour', 'MonoScript'], dotnet, timeoutMs });
             inspect(found.entries.map(e => e.Source)); index = tools.createResourceIndex(inventory);
             resolved = refs.map(r => index.resolve({ ...r.entry, ...r.pointer }));
         }

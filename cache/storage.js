@@ -45,8 +45,12 @@ function snapshotCore(manifest) {
 }
 function openSnapshot({ cacheRoot, snapshotId } = {}) {
     const root = cacheDirectory(cacheRoot);
+    if (!snapshotId && !fs.existsSync(path.join(root, 'current.json')))
+        throw new Error(`No prepared snapshot in ${root}. Run prepare({ sourceRoot, cacheRoot, folders }) first, or pass the correct cacheRoot and snapshotId.`);
     const id = snapshotId || readJSON(path.join(root, 'current.json')).snapshotId;
     if (!/^[a-f0-9]{64}$/.test(id || '')) throw new Error('Invalid snapshot ID');
+    if (!fs.existsSync(path.join(root, 'snapshots', `${id}.json`)))
+        throw new Error(`Snapshot ${id} is missing from ${root}. Check cacheRoot/snapshotId or prepare the snapshot again.`);
     const manifest = readJSON(path.join(root, 'snapshots', `${id}.json`));
     if (manifest.schema !== SCHEMA || digest(JSON.stringify(snapshotCore(manifest))) !== id) throw new Error('Invalid snapshot manifest');
     const identityMaps = new Map();

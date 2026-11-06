@@ -5,6 +5,12 @@ function collateMaps(language) {
     require('./global');
     source ||= createSource(config.GenshinData_folder, (lang, hash) => getLanguage(lang)[String(hash)] || '');
     const records = buildMaps(language, source);
+    if (process.env.MAP_LIMIT_OUTLINE_RESOURCE_CACHE) {
+        const outlines = require('../resources/map-limit-outlines').readResourceCache(process.env.MAP_LIMIT_OUTLINE_RESOURCE_CACHE).outlines;
+        const limits = Object.values(records).filter(record => record.kind === 'limit_region');
+        if (limits.length !== outlines.length) throw new Error('Limit outline cache and source table have different region counts');
+        for (const outline of outlines) require('./maps/limit-outline').attachOutline(records[`limit-region-${outline.id}`], outline);
+    }
     const base = source.mapBase();
     if (base) {
         Object.assign(records, require('./maps/base').baseRecords(base, process.env.MAP_BASE_RESOURCE_CACHE));
@@ -29,6 +35,8 @@ function collateMaps(language) {
             if (!images.length) layer.diagnostics.push('layer_native_image_unresolved');
         }
     }
+    const effects = process.env.MAP_EFFECT_RESOURCE_CACHE;
+    if (effects) Object.assign(records, require('../resources/map-effects').readResourceCache(effects).records);
     const levelTags = process.env.MAP_LEVEL_TAG_RESOURCE_CACHE;
     if (levelTags) require('./maps/level-tag-groups').annotateLevelTagStates(records, require('../resources/level-tag-groups').readResourceCache(levelTags));
     for (const record of Object.values(records)) {

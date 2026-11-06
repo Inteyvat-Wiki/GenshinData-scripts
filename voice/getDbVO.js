@@ -1,6 +1,6 @@
 
 const fs = require('fs');
-const config = require('../config.json');
+const config = require('../runtime-config');
 
 // exportData('voiceovers', require('./extract/extractVoiceover'));
 writeVOFile();

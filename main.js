@@ -1,5 +1,5 @@
 
-require('./versions/textmap').build(require('./config.json'))
+require('./versions/textmap').build(require('./runtime-config'))
 	.then(() => {
 		if (process.argv.includes('--versions-only')) {
 			// Visit all folders for one language at a time so TextMap caching stays
@@ -30,7 +30,7 @@ function exportGenshinData() {
 	exportData('miliastra', require('./extract/extractMiliastra'), false, false, ['CHS', 'EN']);
 	exportData('misc', require('./extract/extractMisc'), false, false, ['CHS', 'EN']);
 	const path = require('node:path');
-	const luaInput = path.resolve(__dirname, process.env.GENSHIN_LUA_PATH || config.Lua_folder || '.cache/lua');
+	const luaInput = require('./runtime-paths').luaDirectory(undefined, config.cacheRoot, config);
 	if (require('node:fs').existsSync(luaInput)) {
 		exportData('tasksubtitles', require('./extract/extractTaskSubtitles'), false, false, ['CHS', 'EN']);
 	} else console.warn('tasksubtitles not refreshed: configure Lua_folder or GENSHIN_LUA_PATH; existing output retained');
@@ -90,7 +90,7 @@ function exportGenshinData() {
 
 function writeVOFile() {
 	const fs = require('fs');
-	const config = require('./config.json');
+	const config = require('./runtime-config');
 	const voiceovers = require(`${config.genshin_export_folder}/EN/voiceovers.json`);
 
 	let vofiles = Object.values(voiceovers).flatMap(voiceover => {

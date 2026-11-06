@@ -15,7 +15,7 @@ function createSource(root, text, options = {}) {
     let worldAreas, mapAreaConfigs, mapBase;
     function areaConfigs() {
         if (options.mapAreaConfigs) return options.mapAreaConfigs();
-        return mapAreaConfigs ||= require('../../resources/map-area-configs').readResourceCache(process.env.MAP_AREA_CONFIG_RESOURCE_CACHE || path.resolve(__dirname, '../../.cache/map-area-configs.json'));
+        return mapAreaConfigs ||= require('../../resources/map-area-configs').readResourceCache(require('../../runtime-paths').resourceCachePath('mapAreaConfigs'));
     }
     function read(file) {
         if (!cache.has(file)) cache.set(file, parseSource(fs.readFileSync(path.join(root, file), 'utf8')));
@@ -50,7 +50,7 @@ function createSource(root, text, options = {}) {
             // always requires the verified client cache and never reads legacy JSON.
             if (options.worldAreas) return options.worldAreas();
             if (!worldAreas) {
-                const file = process.env.MAP_WORLD_AREA_RESOURCE_CACHE || path.resolve(__dirname, '../../.cache/world-areas.json');
+                const file = require('../../runtime-paths').resourceCachePath('worldAreas');
                 worldAreas = require('../../resources/world-areas').readResourceCache(file).scenes;
                 const required = [...new Set(read('ExcelBinOutput/WorldAreaConfigData.json').map(row => row.sceneID))].sort((a, b) => a - b);
                 require('node:assert/strict').deepEqual(worldAreas.map(scene => scene.scene_id).sort((a, b) => a - b), required, 'WorldArea client scene coverage mismatch');

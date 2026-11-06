@@ -220,12 +220,12 @@ async function applySnapshot(db, root, snapshot, previous, files, log = () => {}
 }
 
 function cachePaths(config) {
-    const directory = config.textmap_version_cache || path.join(__dirname, '..', '.cache', 'textmap-versions-chs-en');
+    const directory = config.textmap_version_cache || path.join(require('../cache/storage').cacheDirectory(config.cacheRoot), 'history', 'textmap-versions-chs-en');
     return { directory, database: path.join(directory, 'history.sqlite'), index: path.join(directory, 'hashes.json'), manifest: path.join(directory, 'manifest.json') };
 }
 
 async function build(config, log = console.log) {
-    const root = path.resolve(config.GenshinData_folder);
+    const root = require('../runtime-paths').sourceDirectory(undefined, config);
     const dirty = git(root, ['status', '--porcelain', '--', ...VERSION_TEXTMAP_PATHS]).trim();
     if (dirty) throw new Error('TextMap contains uncommitted changes; commit the source snapshot with its release version before building versions.');
     const snapshots = history(root, config.textmap_version_overrides, log, config.textmap_history_ref);
@@ -316,4 +316,4 @@ async function build(config, log = console.log) {
 
 module.exports = { LANGUAGES, VERSION_LANGUAGES, history, versionOf, normalizeVersion, compareVersions, textPath, selectPaths, token, parseEntry, initialize, applyCounts, applySnapshot, cachePaths, build };
 
-if (require.main === module) build(require('../config.json')).catch(error => { console.error(error.stack); process.exitCode = 1; });
+if (require.main === module) build(require('../runtime-config')).catch(error => { console.error(error.stack); process.exitCode = 1; });

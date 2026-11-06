@@ -37,14 +37,14 @@ function readResourceCache(file) {
     verify(cache.payload); assert.equal(cache.source.sha256, cache.payload.sha256);
     assert.deepEqual(cache.configs, decodeMapAreas(fs.readFileSync(cache.payload.file)), 'Client MapArea decoded cache mismatch'); return cache;
 }
-function prepare({ studio, map: mapInput, assetMap, output, timeoutMs = 120000 }) {
+function prepare({ game = 'GI', studio, map: mapInput, assetMap, output, dotnet, timeoutMs = 120000 }) {
     fs.mkdirSync(output); const mapFile = assetMap || path.join(output, 'asset-map.json');
-    const map = assetMap ? read(assetMap) : tools.readAssetMap({ studio, map: mapInput, output: mapFile, types: ['MiHoYoBinData'], timeoutMs });
+    const map = assetMap ? read(assetMap) : tools.readAssetMap({ studio, map: mapInput, output: mapFile, types: ['MiHoYoBinData'], dotnet, timeoutMs });
     const entries = map.entries.filter(e => path.basename(e.Source) === '31049741.blk' && e.PathID === '3' && e.Offset === 0 && e.Type === 'MiHoYoBinData'); assert.equal(entries.length, 1);
     const indexOutput = path.join(output, 'design-index'), rawOutput = path.join(output, 'payload');
-    const index = tools.extractRawResources({ entries, studio, output: indexOutput, format: 'payload', game: 'GI', timeoutMs });
+    const index = tools.extractRawResources({ entries, studio, output: indexOutput, format: 'payload', game, dotnet, timeoutMs });
     const selected = select(fs.readFileSync(index.resources[0].file), map.entries);
-    tools.extractRawResources({ entries: [selected.entry], studio, output: rawOutput, format: 'payload', game: 'GI', timeoutMs });
+    tools.extractRawResources({ entries: [selected.entry], studio, output: rawOutput, format: 'payload', game, dotnet, timeoutMs });
     const file = path.join(output, 'map-area-configs.json'); buildCache({ mapFile, indexReportFile: path.join(indexOutput, 'extraction-report.json'), rawReportFile: path.join(rawOutput, 'extraction-report.json'), output: file }); return { file };
 }
 module.exports = { buildCache, readResourceCache, prepare, select };

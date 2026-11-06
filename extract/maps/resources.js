@@ -162,7 +162,7 @@ function resourceRecords(cache, file, { source, language, catalogue = {} } = {})
             diagnostics: boundary.diagnostics.map(code => `native_boundary_${code}`) };
         const region = catalogue[`limit-region-${boundary.limitRegionId}`];
         if (region) {
-            region.data.geometry_status = 'native-mask-and-rim';
+            if (region.data.geometry_status !== 'client-simple-polygon') region.data.geometry_status = 'native-mask-and-rim';
             region.relations.push({ role: 'native_boundary', category: 'maps', id });
             region.diagnostics = region.diagnostics.filter(code => code !== 'playable_boundary_geometry_not_resolved');
             region.diagnostics.push('boundary_runtime_activation_unverified');

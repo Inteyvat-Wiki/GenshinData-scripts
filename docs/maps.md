@@ -9,10 +9,10 @@
 地图游戏语义集中在 `extract/maps/catalogue.js`，`extract/extractMaps.js` 是快照提取入口。`maps` 与既有 `maplayers` 是不同查询目录：前者维护完整证据记录，后者暂时兼容现有地图显示数据。旧地图工具和手工坐标没有作为新解析器的输入。
 
 ```js
-const source = require('genshindata-scripts');
+const source = require('@inteyvat-wiki/genshin-data-scripts');
 const snapshot = await source.prepare({
     sourceRoot: 'D:/genshin data',
-    cacheRoot: 'D:/GenshinData-scripts/.cache/map-data',
+    cacheRoot: 'D:/GenshinCache/map-data',
     folders: ['maps', 'maplayers'],
     languages: ['CHS', 'EN'],
     resourceCaches: {

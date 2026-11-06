@@ -108,7 +108,7 @@ event.constants = ['ClearSpeechBubbleTask'];
 event.children = [];
 event.code = [word('SELF', 1, 0, 256), word('CALL', 1, 2, 1), word('RETURN', 0, 1)];
 assert.deepEqual(inspector.inspect('OnSubFailed4201', 'speech_bubble').map(call => [call.method, call.args]), [['ClearSpeechBubbleTask', []]]);
-const lua = path.resolve(__dirname, '../../.cache/lua');
+const lua = require('../../runtime-paths').luaDirectory();
 if (fs.existsSync(path.join(lua, '14798.luac'))) {
     const share = read_lua_share_config('23982.luac', read_lua(path.join(lua, '23982.luac')));
     assert.equal(share?.id, 398);

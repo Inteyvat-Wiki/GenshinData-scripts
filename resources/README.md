@@ -1,8 +1,65 @@
 # Resource preparation
 
+## Stable npm API (0.1.0)
+
+Use `require('@inteyvat-wiki/genshin-data-scripts/resources')`, or
+`require('@inteyvat-wiki/genshin-db').resources` (also available at the db
+`/resources` subpath). Do not resolve files inside an installed package.
+Imports are lazy and read-only. Package names are reserved for this fork;
+publication remains disabled pending explicit approval and license review.
+
+```js
+const { resources } = require('@inteyvat-wiki/genshin-db');
+const { cachePath, result } = resources.prepare('worldAreas', {
+  sourceRoot, studio, map, output: newExternalDirectory, dotnet,
+});
+// Pass cachePath as prepare({ resourceCaches: { worldAreas: cachePath }, ... }).
+```
+
+`supportedKinds` lists the supported case-sensitive names. `prepare(kind, plan)`
+is synchronous and returns `{ kind, cachePath, result }`; `result` is the native
+preparer return value. `output` must always be explicit and new. It is a file for
+Miliastra/profile-frame/TCG/Graeae plans and level tags, otherwise a directory.
+The adapter accepts `sourceRoot` for native `source`/`data`. It does not infer
+block IDs, root objects, scene IDs, formats or missing client data. Lua extraction
+still uses an explicit raw-resource plan in resource-tools, not a new GDS kind.
+
+| Kind / native function | Required inputs besides output | Optional inputs | cachePath |
+| --- | --- | --- | --- |
+| `worldAreas.prepare` | `sourceRoot, studio, map` or exported `assetMap` | `game, dotnet, timeoutMs` | `output/world-areas.json` |
+| `mapAreaConfigs.prepare` | `studio, map` or exported `assetMap` | `game, dotnet, timeoutMs` | `output/map-area-configs.json` |
+| `mapIcons.prepare` | `sourceRoot, studio, map` | `game, dotnet, timeoutMs` | `output/map-icons.json` |
+| `maps.prepare` | `sources, roots, studio` (exact root entries) | `game, dotnet, timeoutMs, maxObjects, maxRounds` | `output/map-resources.json` |
+| `mapAtlas.prepareAtlas` | `studio`; explicit `sources` or `prefabPaths` or `data` | `data, mapAreaConfigs, assetMap, catalogue, extractImages, game, dotnet, timeoutMs, maxObjects, maxSources` | `output/map-resources.json` |
+| `mapEntries.prepare` | `studio, map`; `data` or `sceneTableFile` | `game, dotnet, timeoutMs, maxSources, maxObjects` | `output/map-entries.json` |
+| `mapBase.prepare` | `studio, map`; `entryCacheFile` or `data/sceneTableFile` | `game, dotnet, timeoutMs, maxTiles` | `output/map-base.json` |
+| `mapFog.prepare` | `baseCacheFile, sceneIds, studio, map` | `game, dotnet, timeoutMs` | `output/map-fog.json` |
+| `mapLimitOutlines.prepare` | `sourceRoot, studio, map` | `mapFile, indexReportFile, artIndexReportFile, rawReportFile, dotnet, timeoutMs` | `output/map-limit-outlines.json` |
+| `levelTags.buildCache` | `rawReportFile` (no automatic preparer) | — | `output` |
+| `miliastra.prepare(index, mapFile, output, source, selections?)` | `index, mapFile, sourceRoot` in unified plan | `selections` | `output` |
+| `profileFrames.prepare(index, mapFile, output, source)` | `index, mapFile, sourceRoot` in unified plan | — | `output` |
+| `tcgPortraits.prepare(source, mapFile, output)` | `sourceRoot, mapFile` in unified plan | — | `output` |
+| `graeaeImages.prepareGraeaeImages(source, mapFile, output)` | `sourceRoot, mapFile` in unified plan | — | `output` |
+| `images.run(cacheFile, destination, studio, options?)` | `cacheFile, studio` in unified plan | `game, dotnet, timeoutMs` | `output/extraction-report.json` |
+
+`map` means the original AnimeStudio `.map` file. `mapFile` means the exported
+`readAssetMap` JSON. The historical `assetMap` parameter is not uniform:
+worldAreas/mapAreaConfigs expect exported JSON, while mapAtlas expects the
+original `.map` for bounded discovery. Prefab discovery requires that original
+map; `extractImages` additionally requires `catalogue` or `data` and verified
+map-area configs. All bridge-calling preparers forward explicit `dotnet` through
+nested calls; no global environment mutation or SDK build is performed.
+Game-specific decoders remain GI/version-gated regardless of the bridge game
+option. Detailed signatures are in `resources/index.d.ts`.
+
+`cachePath(name, file?, cacheRoot?)` only resolves a lookup path. It defaults to
+`<cacheDirectory()>/resources/<filename>`; Lua defaults to
+`<cacheDirectory()>/lua`. Those are user-cache locations, never package-local
+`.cache`. A custom resource work root is supported by passing the generated
+files explicitly as `resourceCaches`; no copying into a package is needed.
+
 The shared resource package documents the complete image/Lua/map workflow in
-`@inteyvat-wiki/resource-tools/docs/pipeline.md` (source checkout:
-`../Inteyvat-Wiki-resource-tools/docs/pipeline.md`). All game-specific resource
+`@inteyvat-wiki/resource-tools/docs/pipeline.md`. All game-specific resource
 relations and format/version exceptions belong here, not in wiki-data or Wiki.
 
 ## Client WorldArea polygons
@@ -17,7 +74,7 @@ of `map`. Example:
   "sourceRoot": "D:/genshin data",
   "studio": "C:/Apps/AnimeStudio",
   "map": "C:/Apps/AnimeStudio/Maps/genshin_7.1.map",
-  "output": "D:/GenshinData-scripts/.cache/world-areas-client"
+  "output": "D:/GenshinCache/resources/world-areas-client"
 }
 ```
 
@@ -33,7 +90,7 @@ also stop extraction.
 
 Use the resulting `world-areas.json` as `resourceCaches.worldAreas`,
 `MAP_WORLD_AREA_RESOURCE_CACHE`, or `--world-area-resources` when preparing maps.
-The local default is `.cache/world-areas.json`. Opening an immutable downstream
+The default lookup is `<cacheRoot>/resources/world-areas.json`. Opening an immutable downstream
 snapshot does not require the original client installation. Never append these
 polygons to old JSON: the client cache replaces each scene's complete geometry,
 including changed older areas. Repeated area IDs retain distinct polygon parts.
@@ -100,9 +157,9 @@ values, preserves other placeholders, and retains original TextMap dependencies.
 
 Profile frames reuse the same full UInt64 index, asset map and image extractor.
 After preparing the index/map below, run
-`node resources/profile-frames.js INDEX IMAGE_MAP_JSON .cache/profile-frame-resources.json RAW_DATA`.
+`node resources/profile-frames.js INDEX IMAGE_MAP_JSON NEW_CACHE RAW_DATA`.
 For a different cache filename, set `PROFILE_FRAME_RESOURCE_CACHE` before extraction/export.
-Run `node resources/extract-miliastra-images.js .cache/profile-frame-resources.json NEW_OUTPUT [STUDIO]`,
+Run `node resources/extract-miliastra-images.js CACHE NEW_OUTPUT STUDIO`,
 then import with wiki-data's `scripts/import_miliastra_resource_images.cjs NEW_OUTPUT NEW_IMAGE_DIR`.
 The historical script names also support profile-frame plans; no Miliastra tables
 are required by the image extraction/import steps. Regenerate misc, rebuild the
@@ -117,21 +174,21 @@ GenshinData-scripts; downstream consumers only read genshin-db.
 
 1. Extract the resource index MiHoYoBinData `0000006f` with AnimeStudio. For the
    verified 7.1 snapshot it is in `31049740.blk` (not the design index `31049741`).
-2. Install the local `@inteyvat-wiki/resource-tools` npm dependency (the adjacent
-   `Inteyvat-Wiki-resource-tools` checkout). Run `npm run build:helper` in that
-   source checkout once; distributed tarballs already include the small bridge.
+2. The npm dependency is `@inteyvat-wiki/resource-tools@0.1.0`; no adjacent
+   checkout is needed. Maintainers run `npm run build:helper` in its source
+   checkout before packaging; distributed tarballs include the small bridge.
    Map reading reuses AnimeStudio's .NET runtime, without PowerShell. Only
    maintainers compiling the bridge need a .NET SDK.
 3. Run `npm exec -- resource-tools read-asset-map --studio STUDIO --map MAP --output OUTPUT_JSON`.
    This exports all Sprite/Texture2D entries without truncating resource keys.
    Use a new output filename. The old .NET 10 `resources/asset-map` launcher
    remains a compatibility adapter delegating to the same npm API.
-4. Run `node resources/miliastra.js INDEX OUTPUT_JSON .cache/miliastra-resources.json RAW_DATA`.
+4. Run `node resources/miliastra.js INDEX OUTPUT_JSON NEW_CACHE RAW_DATA`.
    Output is exclusive: use a new cache filename for updates, review it, then set
    `MILIASTRA_RESOURCE_CACHE` to that path. Inputs and generated caches are not committed.
 5. Run `node --test resources/*.test.js`, `node extract/archives/check_miliastra.js`,
    then `npm run export:archives -- miliastra` and rebuild genshin-db's Miliastra index.
-6. Run `node resources/extract-miliastra-images.js CACHE NEW_OUTPUT [STUDIO]`.
+6. Run `node resources/extract-miliastra-images.js CACHE NEW_OUTPUT STUDIO`.
    It groups exact selected assets by block, writes XML plans, extracts with
    AnimeStudio using BySource, and preserves logs and provenance. It rejects
    existing output directories and split-file inputs. In wiki-data, run

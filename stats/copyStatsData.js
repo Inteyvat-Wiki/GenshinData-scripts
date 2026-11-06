@@ -2,7 +2,7 @@
 function copyStatsData() {
 	const fs = require('fs');
 	const path = require('path');
-	const config = require(path.resolve(__dirname, '../config.json'));
+	const config = require('../runtime-config');
 
 	if (fs.existsSync(`${config.genshin_export_folder}/EN/characters.json`)) {
 		const characterdata = require(`${config.genshin_export_folder}/EN/characters.json`);

@@ -78,7 +78,7 @@ function buildCache({ selectionFile, mapFile, rawReportFile, imageReportFile, ou
     fs.writeFileSync(output, JSON.stringify(cache, null, 2) + '\n', { flag: 'wx' });
     return cache;
 }
-function prepare({ sourceRoot, studio, map: mapInput, output, game = 'GI', timeoutMs = 120000 }) {
+function prepare({ sourceRoot, studio, map: mapInput, output, game = 'GI', dotnet, timeoutMs = 120000 }) {
     assert(sourceRoot && studio && mapInput && output, 'Specify sourceRoot, studio, map and a new output directory');
     fs.mkdirSync(output); // Preserve earlier cache and any partial output.
     const { createSource } = require('../extract/maps/source');
@@ -94,15 +94,15 @@ function prepare({ sourceRoot, studio, map: mapInput, output, game = 'GI', timeo
     const selectionFile = path.join(output, 'selection.json');
     fs.writeFileSync(selectionFile, JSON.stringify({ schema: 1, references: refs, names, inputs }, null, 2));
     const mapFile = path.join(output, 'asset-map.json');
-    const map = tools.readAssetMap({ studio, map: mapInput, output: mapFile, names, types: ['Sprite', 'Texture2D'], timeoutMs });
+    const map = tools.readAssetMap({ studio, map: mapInput, output: mapFile, names, types: ['Sprite', 'Texture2D'], dotnet, timeoutMs });
     const { selected } = selectEntries(names, map.entries);
     assert(selected.length, 'No uniquely mapped point icons were found');
     // A raw read records the exact serialized CAB. PNG paths must match that CAB,
     // because AnimeStudio XML does not enforce the Offset field by itself.
     tools.extractRawResources({ entries: selected, studio, game, output: path.join(output, 'serialized'),
-        format: 'serialized', inputs: [selectionFile, mapFile, mapInput], timeoutMs });
+        format: 'serialized', inputs: [selectionFile, mapFile, mapInput], dotnet, timeoutMs });
     tools.extractResources({ entries: selected, studio, game, output: path.join(output, 'images'), selection: 'preserve',
-        inputs: [selectionFile, mapFile, mapInput], timeoutMs });
+        inputs: [selectionFile, mapFile, mapInput], dotnet, timeoutMs });
     const file = path.join(output, 'map-icons.json');
     const cache = buildCache({ selectionFile, mapFile, rawReportFile: path.join(output, 'serialized/extraction-report.json'),
         imageReportFile: path.join(output, 'images/extraction-report.json'), output: file });

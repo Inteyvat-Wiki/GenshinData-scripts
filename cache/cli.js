@@ -7,7 +7,7 @@ function parse(args) {
         ['--snapshot', 'snapshotId'], ['--folders', 'folders'], ['--languages', 'languages'],
         ['--history-refs', 'historyRefs'], ['--history-seed', 'historySeedCache'],
         ['--miliastra-resources', 'miliastra'], ['--profile-frame-resources', 'profileFrames'], ['--map-resources', 'maps'], ['--map-icon-resources', 'mapIcons'], ['--world-area-resources', 'worldAreas'],
-        ['--map-area-config-resources', 'mapAreaConfigs'], ['--map-base-resources', 'mapBase'], ['--map-fog-resources', 'mapFog'], ['--level-tag-resources', 'levelTags']]);
+        ['--map-area-config-resources', 'mapAreaConfigs'], ['--map-base-resources', 'mapBase'], ['--map-fog-resources', 'mapFog'], ['--map-effects', 'mapEffects'], ['--map-limit-outlines', 'mapLimitOutlines'], ['--level-tag-resources', 'levelTags']]);
     while (args.length) {
         const flag = args.shift();
         if (flag === '--no-versions') { options.versions = false; continue; }
@@ -17,7 +17,7 @@ function parse(args) {
         if (!value || value.startsWith('--')) throw new Error(`Missing value for ${flag}`);
         const name = flags.get(flag);
         if (name === 'folders' || name === 'languages' || name === 'historyRefs') options[name] = value.split(',').filter(Boolean);
-        else if (['miliastra', 'profileFrames', 'maps', 'mapIcons', 'worldAreas', 'mapAreaConfigs', 'mapBase', 'mapFog', 'levelTags'].includes(name)) (options.resourceCaches ||= {})[name] = value;
+        else if (['miliastra', 'profileFrames', 'maps', 'mapIcons', 'worldAreas', 'mapAreaConfigs', 'mapBase', 'mapFog', 'mapEffects', 'mapLimitOutlines', 'levelTags'].includes(name)) (options.resourceCaches ||= {})[name] = value;
         else options[name] = value;
     }
     if (options.folders?.includes('all')) options.folders = [...Object.keys(extractors), 'interactions'];

@@ -4,6 +4,7 @@ const childProcess = require('node:child_process');
 const { cacheDirectory, digest, readJSON, atomicJSON, openSnapshot, captureDirectory } = require('./storage');
 const { recalculateVersions } = require('./versions');
 const { select } = require('./registry');
+const { sourceDirectory, luaDirectory, resourceCachePath, resourcePaths } = require('../runtime-paths');
 const project = path.resolve(__dirname, '..');
 
 function git(root, args) { return childProcess.execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, windowsHide: true }); }
@@ -24,7 +25,7 @@ function fileHash(file) {
 function codeHash() {
     const paths = ['extract', 'versions', 'cache'].flatMap(dir => files(path.join(project, dir)))
         .filter(file => file.endsWith('.js') && !file.endsWith('.test.js'));
-    paths.push(path.join(project, 'runtime-config.js'));
+    paths.push(path.join(project, 'runtime-config.js'), path.join(project, 'runtime-paths.js'));
     // Match the package's resources/*.js boundary, including new resource decoders.
     // Never traverse resource inputs, compiled helpers or extraction caches.
     for (const entry of fs.readdirSync(path.join(project, 'resources'), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -49,7 +50,7 @@ function runExtractor(config, log) {
     return new Promise((resolve, reject) => {
         const child = childProcess.spawn(process.execPath, [path.join(__dirname, 'extract.js')], {
             cwd: project, windowsHide: true, stdio: ['ignore', log ? 'pipe' : 'inherit', log ? 'pipe' : 'inherit'],
-            env: { ...process.env, ...config.resource_caches, GENSHIN_LUA_PATH: config.Lua_folder || '', GENSHIN_DATA_RUNTIME_CONFIG: JSON.stringify(config) },
+            env: { ...process.env, ...config.resource_caches, GENSHIN_DATA_CACHE: config.cacheRoot, GENSHIN_LUA_PATH: config.Lua_folder || '', GENSHIN_DATA_RUNTIME_CONFIG: JSON.stringify(config) },
         });
         if (log) for (const stream of [child.stdout, child.stderr].filter(Boolean)) {
             require('node:readline').createInterface({ input: stream, crlfDelay: Infinity }).on('line', log);
@@ -64,13 +65,16 @@ function priorSnapshot(root) {
 }
 async function prepare(options = {}) {
     const selection = select(options), root = cacheDirectory(options.cacheRoot);
-    const sourceRoot = path.resolve(options.sourceRoot || require('../runtime-config').GenshinData_folder || '.');
     const runtime = require('../runtime-config');
-    const configuredRefs = runtime.GenshinData_folder && path.resolve(runtime.GenshinData_folder) === sourceRoot ? runtime.textmap_history_refs : undefined;
+    const sourceRoot = sourceDirectory(options.sourceRoot, runtime);
+    if (!fs.existsSync(sourceRoot) || !fs.statSync(sourceRoot).isDirectory())
+        throw new Error(`sourceRoot directory does not exist: ${sourceRoot}. Set sourceRoot to the game-data Git repository.`);
+    const legacy = runtime.GenshinData_folder && path.resolve(runtime.GenshinData_folder) === sourceRoot ? runtime : {};
+    const configuredRefs = legacy.textmap_history_refs || (legacy.textmap_history_ref && [].concat(legacy.textmap_history_ref));
     const historyRefs = options.historyRefs || configuredRefs || ['HEAD'];
     if (!Array.isArray(historyRefs) || !historyRefs.length || historyRefs.some(ref => typeof ref !== 'string' || !ref || ref.startsWith('-')))
         throw new Error('historyRefs must be a non-empty ordered list of Git refs');
-    const overrides = options.versionOverrides || {};
+    const overrides = options.versionOverrides || legacy.textmap_version_overrides || {};
     for (const [ref, version] of Object.entries(overrides)) {
         if (!/^[a-f0-9]{40}$/.test(ref) || typeof version !== 'string' || !/^\d+\.\d+$/.test(version))
             throw new Error('Version overrides must map full commit SHA values to major.minor versions');
@@ -82,21 +86,21 @@ async function prepare(options = {}) {
     let stage;
     try {
         const source = sourceState(sourceRoot), code = codeHash();
-        const luaRoot = selection.folders.includes('tasksubtitles') ? path.resolve(options.luaRoot || process.env.GENSHIN_LUA_PATH || require('../runtime-config').Lua_folder || path.join(project, '.cache/lua')) : undefined;
+        const luaRoot = selection.folders.includes('tasksubtitles') ? luaDirectory(options.luaRoot, root, runtime) : undefined;
+        if (luaRoot && (!fs.existsSync(luaRoot) || !fs.statSync(luaRoot).isDirectory()))
+            throw new Error(`Task subtitles require Lua bytecode at ${luaRoot}. Prepare Lua resources, then pass luaRoot or set GENSHIN_LUA_PATH.`);
         const luaState = () => luaRoot ? files(luaRoot).filter(file => /\.(luac|lua|bin|bytes)$/i.test(file)).map(file => [path.relative(luaRoot, file).replaceAll('\\', '/'), fileHash(file)]) : [];
         const lua = luaState();
-        if (luaRoot && !lua.length) throw new Error('No task Lua bytecode inputs found');
+        if (luaRoot && !lua.length) throw new Error(`No task Lua bytecode inputs found at ${luaRoot}; pass luaRoot or set GENSHIN_LUA_PATH to a prepared Lua directory.`);
         const resourceCaches = {};
         if (selection.folders.includes('maps')) {
-            resourceCaches.MAP_WORLD_AREA_RESOURCE_CACHE = path.resolve(options.resourceCaches?.worldAreas || process.env.MAP_WORLD_AREA_RESOURCE_CACHE || path.join(project, '.cache/world-areas.json'));
-            require('../resources/world-areas').readResourceCache(resourceCaches.MAP_WORLD_AREA_RESOURCE_CACHE);
-            resourceCaches.MAP_AREA_CONFIG_RESOURCE_CACHE = path.resolve(options.resourceCaches?.mapAreaConfigs || process.env.MAP_AREA_CONFIG_RESOURCE_CACHE || path.join(project, '.cache/map-area-configs.json'));
-            require('../resources/map-area-configs').readResourceCache(resourceCaches.MAP_AREA_CONFIG_RESOURCE_CACHE);
+            resourceCaches.MAP_WORLD_AREA_RESOURCE_CACHE = resourceCachePath('worldAreas', options.resourceCaches?.worldAreas, root);
+            resourceCaches.MAP_AREA_CONFIG_RESOURCE_CACHE = resourceCachePath('mapAreaConfigs', options.resourceCaches?.mapAreaConfigs, root);
         }
         if (selection.folders.includes('miliastra') && fs.existsSync(path.join(sourceRoot, 'ExcelBinOutput/BeyondCostumeExcelConfigData.json')))
-            resourceCaches.MILIASTRA_RESOURCE_CACHE = path.resolve(options.resourceCaches?.miliastra || process.env.MILIASTRA_RESOURCE_CACHE || path.join(project, '.cache/miliastra-resources.json'));
+            resourceCaches.MILIASTRA_RESOURCE_CACHE = resourceCachePath('miliastra', options.resourceCaches?.miliastra, root);
         if (selection.folders.includes('misc') && fs.existsSync(path.join(sourceRoot, 'ExcelBinOutput/ProfileFrameExcelConfigData.json')))
-            resourceCaches.PROFILE_FRAME_RESOURCE_CACHE = path.resolve(options.resourceCaches?.profileFrames || process.env.PROFILE_FRAME_RESOURCE_CACHE || path.join(project, '.cache/profile-frame-resources.json'));
+            resourceCaches.PROFILE_FRAME_RESOURCE_CACHE = resourceCachePath('profileFrames', options.resourceCaches?.profileFrames, root);
         if (selection.folders.includes('maps') && (options.resourceCaches?.maps || process.env.MAP_RESOURCE_CACHE))
             resourceCaches.MAP_RESOURCE_CACHE = path.resolve(options.resourceCaches?.maps || process.env.MAP_RESOURCE_CACHE);
         if (selection.folders.includes('maps') && (options.resourceCaches?.mapIcons || process.env.MAP_ICON_RESOURCE_CACHE))
@@ -105,8 +109,21 @@ async function prepare(options = {}) {
             resourceCaches.MAP_BASE_RESOURCE_CACHE = path.resolve(options.resourceCaches?.mapBase || process.env.MAP_BASE_RESOURCE_CACHE);
         if (selection.folders.includes('maps') && (options.resourceCaches?.mapFog || process.env.MAP_FOG_RESOURCE_CACHE))
             resourceCaches.MAP_FOG_RESOURCE_CACHE = path.resolve(options.resourceCaches?.mapFog || process.env.MAP_FOG_RESOURCE_CACHE);
+        if (selection.folders.includes('maps') && (options.resourceCaches?.mapEffects || process.env.MAP_EFFECT_RESOURCE_CACHE))
+            resourceCaches.MAP_EFFECT_RESOURCE_CACHE = resourceCachePath('mapEffects', options.resourceCaches?.mapEffects, root);
+        if (selection.folders.includes('maps') && (options.resourceCaches?.mapLimitOutlines || process.env.MAP_LIMIT_OUTLINE_RESOURCE_CACHE))
+            resourceCaches.MAP_LIMIT_OUTLINE_RESOURCE_CACHE = resourceCachePath('mapLimitOutlines', options.resourceCaches?.mapLimitOutlines, root);
         if (selection.folders.includes('maps') && (options.resourceCaches?.levelTags || process.env.MAP_LEVEL_TAG_RESOURCE_CACHE))
             resourceCaches.MAP_LEVEL_TAG_RESOURCE_CACHE = path.resolve(options.resourceCaches?.levelTags || process.env.MAP_LEVEL_TAG_RESOURCE_CACHE);
+        for (const [name, [env]] of Object.entries(resourcePaths)) {
+            const file = resourceCaches[env];
+            if (file && (!fs.existsSync(file) || !fs.statSync(file).isFile()))
+                throw new Error(`Missing resourceCaches.${name}: ${file}. Prepare it via @inteyvat-wiki/genshin-data-scripts/resources, then pass resourceCaches.${name} or set ${env}.`);
+        }
+        if (selection.folders.includes('maps')) {
+            require('../resources/world-areas').readResourceCache(resourceCaches.MAP_WORLD_AREA_RESOURCE_CACHE);
+            require('../resources/map-area-configs').readResourceCache(resourceCaches.MAP_AREA_CONFIG_RESOURCE_CACHE);
+        }
         const resourceState = () => Object.entries(resourceCaches).map(([name, file]) => {
             const cache = readJSON(file);
             for (const input of cache.inputs || []) if (fileHash(input.file) !== input.sha256) throw new Error(`Stale resource lookup input: ${input.file}`);
@@ -119,7 +136,7 @@ async function prepare(options = {}) {
         if (options.versions !== false) {
             const resolvedRefs = historyRefs.map(ref => git(sourceRoot, ['rev-parse', '--verify', `${ref}^{commit}`]).trim());
             const historyCode = digest(fs.readFileSync(path.join(project, 'versions/textmap.js')));
-            const config = { GenshinData_folder: sourceRoot, textmap_history_ref: resolvedRefs, textmap_version_seed: options.historySeedCache,
+            const config = { GenshinData_folder: sourceRoot, textmap_history_ref: resolvedRefs, textmap_version_seed: options.historySeedCache || legacy.textmap_version_seed,
                 textmap_version_overrides: overrides, textmap_version_cache: path.join(root, 'history', digest(JSON.stringify({ sourceRoot, historyCode, overrides, refs: historyRefs }))) };
             versionIndex = await require('../versions/textmap').build(config, options.log || console.log);
             historyId = fileHash(versionIndex);
@@ -148,7 +165,7 @@ async function prepare(options = {}) {
         const stagingRoot = path.join(root, 'staging');
         fs.mkdirSync(stagingRoot, { recursive: true });
         stage = fs.mkdtempSync(path.join(stagingRoot, 'build-'));
-        await runExtractor({ GenshinData_folder: sourceRoot, Lua_folder: luaRoot,
+        await runExtractor({ GenshinData_folder: sourceRoot, Lua_folder: luaRoot, cacheRoot: root,
             genshin_output_folder: path.join(stage, 'data'), genshin_export_folder: path.join(stage, 'export'),
             textmap_version_cache: versionIndex && path.dirname(versionIndex), version_tracking: options.versions !== false,
             textmap_version_index_id: historyId,

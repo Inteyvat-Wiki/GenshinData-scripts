@@ -237,7 +237,7 @@ test('uint64 image/reference hashes are exact source lexemes, never rounded numb
         assert.equal(resolved.image.Type, 'Sprite');
         assert(item.source.references.some(reference => reference.startsWith(`resource64:${row.iconPathHash};`)));
     }
-    const file = path.join(require('../../config.json').GenshinData_folder, 'ExcelBinOutput/LocalLegendExcelConfigData.json');
+    const file = path.join(require('../../runtime-config').GenshinData_folder, 'ExcelBinOutput/LocalLegendExcelConfigData.json');
     const original = fs.readFileSync(file, 'utf8');
     for (const row of read('LocalLegendExcelConfigData')) {
         const item = chs[`gallant_path-${row.id}`];
@@ -512,7 +512,7 @@ test('achievement collections retain default ID zero, source ordering and exact 
 });
 
 test('ordinary and Medium TextMaps merge exactly; resolved Medium-only prose is version-tracked', () => {
-    const root = require('../../config.json').GenshinData_folder;
+    const root = require('../../runtime-config').GenshinData_folder;
     for (const language of ['CHS', 'EN']) {
         const ordinary = JSON.parse(fs.readFileSync(path.join(root, `TextMap/TextMap${language}.json`), 'utf8'));
         const medium = JSON.parse(fs.readFileSync(path.join(root, `TextMap/TextMap_Medium${language}.json`), 'utf8'));

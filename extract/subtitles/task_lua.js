@@ -2,9 +2,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { lua_bubble_methods, read_lua, LuaInspector, read_lua_share_config } = require('./lua');
 const { bubble_call_identity } = require('./lua_bubble_rules');
-const project = path.resolve(__dirname, '../..');
 const config = require('../../runtime-config');
-const lua_path = path.resolve(project, process.env.GENSHIN_LUA_PATH || config.Lua_folder || '.cache/lua');
+const lua_path = require('../../runtime-paths').luaDirectory(undefined, config.cacheRoot, config);
 let placements;
 function files(folder) {
     if (!fs.existsSync(folder))

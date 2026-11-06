@@ -1,13 +1,20 @@
 {
-  "name": "genshindata-scripts",
+  "name": "@inteyvat-wiki/genshin-data-scripts",
   "description": "Node scripts to extract data from ExcelBinOutput",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "main": "index.js",
   "types": "index.d.ts",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.js" },
+    "./resources": { "types": "./resources/index.d.ts", "default": "./resources/index.js" },
+    "./cache/storage": "./cache/storage.js",
+    "./package.json": "./package.json"
+  },
   "engines": { "node": ">=22.13" },
-  "files": ["index.js", "index.d.ts", "runtime-config.js", "main.js", "archives.js", "misc.js", "subtitles.js", "cache/", "extract/", "versions/", "resources/*.js", "!resources/*.test.js", "LICENSE", "LICENSES/", "NOTICES.md", "docs/", "README.md"],
+  "files": ["index.js", "index.d.ts", "runtime-config.js", "runtime-paths.js", "main.js", "archives.js", "misc.js", "subtitles.js", "cache/", "extract/", "versions/", "resources/*.js", "resources/*.d.ts", "resources/README.md", "!resources/*.test.js", "scripts/publish/disabled.cjs", "LICENSE", "LICENSES/", "NOTICES.md", "docs/", "README.md"],
   "scripts": {
+    "prepublishOnly": "node scripts/publish/disabled.cjs",
     "test:unit": "node scripts/test-unit.cjs",
     "cache": "node cache/cli.js",
     "cache:prepare": "node cache/cli.js prepare",
@@ -36,7 +43,7 @@
   "author": "Inteyvat-Wiki",
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
-    "@inteyvat-wiki/resource-tools": "file:../Inteyvat-Wiki-resource-tools",
+    "@inteyvat-wiki/resource-tools": "0.1.0",
     "fuzzysort": "^2.0.1"
   },
   "devDependencies": {

@@ -1,11 +1,11 @@
 // Targeted export uses the same version builder/writer as the ordinary entry point.
-require('./versions/textmap').build(require('./config.json'))
+require('./versions/textmap').build(require('./runtime-config'))
     .then(() => {
         const { exportData } = require('./extract/global');
         exportData('misc', require('./extract/extractMisc'), false, false, ['CHS', 'EN']);
         // Remove only the retired, reproducible mail catalogue in this export folder.
         const fs = require('node:fs'), path = require('node:path');
-        const root = path.resolve(require('./config.json').genshin_output_folder);
+        const root = path.resolve(require('./runtime-config').genshin_output_folder);
         for (const language of ['ChineseSimplified', 'English']) {
             const directory = path.join(root, language, 'misc');
             for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {

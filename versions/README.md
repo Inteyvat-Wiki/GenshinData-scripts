@@ -19,9 +19,9 @@ InterAction 原样复制文件没有经过 TextMap 翻译，不在这些分类�
 
 支持历史 TextCHS/TextEN 和现代 TextMapCHS/TextMapEN；同语言存在现代文件时不使用旧命名文件；Medium 和分片覆盖顺序与当前导出一致。比较使用原文，不应用任何文本清洗。内部使用每种参与语言的 128 位 SHA-256 指纹减少存储，保留两个固定语言槽位；缺失语言不同于空字符串。后来增加意大利语、土耳其语等语言不再影响内容身份或数量。指纹存在理论碰撞概率。
 
-缓存默认位于 `.cache/textmap-versions-chs-en/`：SQLite 历史状态、当前哈希版本表 `hashes.json`、索引清单 `manifest.json`。旧的 15 语言缓存 `.cache/textmap-versions/` 保留，不复用；首次执行 `npm run exportversions` 将构建新索引，再替换对象版本表。缓存身份和指纹包含参与语言及模式版本；若使用自定义缓存目录，语言或模式不匹配时会重建该目录中的统计状态。首次回溯开销较大，之后支持按提交增量更新和中断续跑。参与推断的 CHS/EN TextMap 未提交修改会报错，避免给未知快照标注版本。缓存不提交到 Git。
+旧命令的缓存默认位于操作系统用户缓存 `Inteyvat-Wiki/genshin-data/history/textmap-versions-chs-en/`，可通过 `GENSHIN_DATA_CACHE` 改变根目录：包含 SQLite 历史状态、当前哈希版本表 `hashes.json` 和 `manifest.json`。新 prepare 接口使用同一缓存根的 `history/<内容身份>/`。不再自动读取或写入包内 `.cache`，原有本地缓存不移动、不删除；需要迁移时显式传入 `historySeedCache`。缓存身份和指纹包含参与语言及模式版本。首次回溯开销较大，之后支持按提交增量更新和中断续跑。参与推断的 CHS/EN TextMap 未提交修改会报错，避免给未知快照标注版本。缓存不提交到 Git。
 
-可在 `config.json` 中设置 `textmap_version_cache` 更改缓存目录，以及 `textmap_version_overrides`（完整提交 SHA 到 `major.minor` 的映射）修正源提交版本标注。配置覆盖优先于程序内置特判，内置特判优先于提交标题。改变已处理历史的版本或顺序时须换用新缓存目录。无版本号的提交继承前一快照版本；同一版本的多次提交按历史顺序处理。
+旧命令需通过 `GENSHIN_DATA_CONFIG` 显式选择 JSON 配置，再用 `textmap_version_cache` 更改历史缓存目录，用 `textmap_version_overrides`（完整提交 SHA 到 `major.minor` 的映射）修正源提交版本标注；不会自动读取仓库的 `config.json`。新接口使用 `cacheRoot`、`versionOverrides`、`historyRefs`、`historySeedCache`。配置覆盖优先于程序内置特判，内置特判优先于提交标题。改变已处理历史的版本或顺序时须换用新缓存目录。无版本号的提交继承前一快照版本；同一版本的多次提交按历史顺序处理。
 
 这是文本数量启发式推断，不是真实上线日期。翻译修订、重复文本增删、源仓库缺失快照，以及错误的提交版本号都会影响结果。当前历史始于 1.4，只能把更早内容归到 `1.x`。
 

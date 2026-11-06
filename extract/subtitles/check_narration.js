@@ -31,7 +31,7 @@ assert.equal(inspector.inspect('OnSubStart4201').length, 1);
 assert.equal(inspector.calls[0].guards.length, 1);
 event.code = [instruction('RETURN', 0, 1), ...event.code];
 assert.equal(inspector.inspect('OnSubStart4201').length, 0);
-const fixture_path = path.resolve(__dirname, '../../.cache/lua');
+const fixture_path = require('../../runtime-paths').luaDirectory();
 for (const [actor, config, owner, method, narrator] of [
     [18538, 22661, 76202, 'OnSubStart7620210', 7620203],
     [15316, 19523, 20005, 'OnSubStart2000502', undefined],

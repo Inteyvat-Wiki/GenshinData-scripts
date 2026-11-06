@@ -119,7 +119,7 @@ function createResourceLookup(filename) {
         return cache.resources[hash];
     };
 }
-const resourceIcon = createResourceLookup(() => process.env.MILIASTRA_RESOURCE_CACHE || path.resolve(__dirname, '../.cache/miliastra-resources.json'));
+const resourceIcon = createResourceLookup(() => require('../runtime-paths').resourceCachePath('miliastra'));
 module.exports = { parseIndex, resolve, prepare, resourceIcon, readResourceCache, createResourceLookup };
 if (require.main === module) {
     const [index, map, output, source] = process.argv.slice(2);
